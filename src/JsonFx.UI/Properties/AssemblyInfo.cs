@@ -71,7 +71,7 @@ using System.Security;
 #endif
 )]
 
-[assembly: Guid("D98A5EF8-4709-4FF8-B162-8EA04B281400")]
+[assembly: Guid("AC07FF51-0CF1-4f3d-A702-0F047405AF37")]
 #if !STRONG
-[assembly: InternalsVisibleTo("JsonFx.Tests")]
+[assembly: InternalsVisibleTo("JsonFx.UI.Tests")]
 #endif

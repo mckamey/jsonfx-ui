@@ -10,7 +10,7 @@
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>JsonFx</RootNamespace>
-    <AssemblyName>JsonFx.Tests</AssemblyName>
+    <AssemblyName>JsonFx.UI.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <MapFileExtensions>true</MapFileExtensions>
