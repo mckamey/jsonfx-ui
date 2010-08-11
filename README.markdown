@@ -1,4 +1,4 @@
-## v2.0 Coming soon!
+**v2.0 coming soon...**
 
 # [JsonFx.UI v2.0][1] - Ajax UI framework for .NET
 ## Distributed under the terms of an [MIT-style license][2]
