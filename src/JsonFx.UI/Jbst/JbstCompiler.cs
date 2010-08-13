@@ -43,7 +43,7 @@ using JsonFx.Serialization;
 namespace JsonFx.Jbst
 {
 	/// <summary>
-	/// Compiles JBST templates into executable JavaScript
+	/// Compiles JBST templates into executable JavaScript controls.
 	/// </summary>
 	public class JbstCompiler
 	{
@@ -352,13 +352,22 @@ namespace JsonFx.Jbst
 			return result;
 		}
 
+		/// <summary>
+		/// Interprets unparsed blocks
+		/// </summary>
+		/// <param name="state"></param>
+		/// <param name="block"></param>
+		/// <returns></returns>
+		/// <remarks>
+		/// Unrecognized UnparsedBlocks are emitted as plaintext
+		/// </remarks>
 		private Token<MarkupTokenType> ProcessCodeBlock(CompilationState state, UnparsedBlock block)
 		{
 			switch (block.Begin)
 			{
 				case "%@":
 				{
-					// store directive for specialized parsing
+					// extract directive settings
 					this.ProcessDirective(state, block);
 					return null;
 				}
@@ -366,7 +375,7 @@ namespace JsonFx.Jbst
 				{
 					// analogous to static code, or JSP declarations
 					// executed only on initialization of template
-					// output from declarations are appended after the template
+					// output from declarations are applied to the template
 					state.DeclarationBlock.Append(block.Value);
 					return null;
 				}
@@ -408,17 +417,23 @@ namespace JsonFx.Jbst
 			}
 		}
 
+		/// <summary>
+		/// Parses directives and applies their settings to the compilation state
+		/// </summary>
+		/// <param name="state"></param>
+		/// <param name="block"></param>
+		/// <remarks>
+		/// Unrecognized directives and properties are ignored
+		/// </remarks>
 		private void ProcessDirective(CompilationState state, UnparsedBlock block)
 		{
-			string asTag = String.Concat('<', (block.Value ?? "").TrimStart(), '>');
-
-			var tokens = new HtmlTokenizer().GetTokens(asTag);
-			if (tokens == null)
+			if (String.IsNullOrEmpty(block.Value))
 			{
 				return;
 			}
 
-			var enumerator = tokens.GetEnumerator();
+			string asTag = String.Concat('<', block.Value.TrimStart(), '>');
+			var enumerator = new HtmlTokenizer().GetTokens(asTag).GetEnumerator();
 			if (!enumerator.MoveNext())
 			{
 				return;
@@ -479,7 +494,7 @@ namespace JsonFx.Jbst
 								string package = token.ValueAsString();
 								if (!String.IsNullOrEmpty(package))
 								{
-									string[] packages = package.Split(ImportDelim, StringSplitOptions.RemoveEmptyEntries);
+									string[] packages = package.Split(JbstCompiler.ImportDelim, StringSplitOptions.RemoveEmptyEntries);
 									state.Imports.AddRange(packages);
 								}
 								break;
@@ -525,7 +540,6 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Generates a globals list from import directives
 		/// </summary>
-		/// <returns></returns>
 		private void EmitGlobals(CompilationState state, TextWriter writer)
 		{
 			bool hasGlobals = false;
@@ -560,6 +574,12 @@ namespace JsonFx.Jbst
 			}
 		}
 
+		/// <summary>
+		/// Replaces string of whitespace with a single space
+		/// </summary>
+		/// <param name="text"></param>
+		/// <param name="normalized"></param>
+		/// <returns></returns>
 		private bool NormalizeWhitespace(string text, out string normalized)
 		{
 			if (String.IsNullOrEmpty(text))
