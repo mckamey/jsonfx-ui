@@ -170,7 +170,7 @@ Foo.MyZebraList = JsonML.BST(
 [
 	""div"",
 	{
-		""class"": ""example""
+		""class"" : ""example""
 	},
 	"" "",
 	[
@@ -195,9 +195,8 @@ Foo.MyZebraList = JsonML.BST(
 	[
 		""ul"",
 		{
-			""class"": ""items"",
-			""jbst:visible"": 
-				function() {
+			""class"" : ""items"",
+			""jbst:visible"" : function() {
 	return this.data.children.length > 0;
 }
 		},
@@ -213,8 +212,7 @@ Foo.MyZebraList = JsonML.BST(
 			[
 				""li"",
 				{
-					""class"": 
-						function() {
+					""class"" : function() {
 	return Foo.MyZebraList.zebraStripe(this.data.selected, this.index, this.count);
 }
 				},
@@ -237,7 +235,7 @@ Foo.MyZebraList = JsonML.BST(
 			},
 		"" ""
 	],
-	""\n""
+	"" ""
 ]);
 // initialize template in the context of ""this""
 (function() {

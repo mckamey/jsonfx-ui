@@ -52,6 +52,7 @@ namespace JsonFx.Jbst
 		private static readonly char[] ImportDelim = { ' ', ',' };
 		private const string Whitespace = " ";
 		private static readonly Regex RegexWhitespace = new Regex(@"\s+", RegexOptions.Compiled|RegexOptions.CultureInvariant);
+		private static readonly DataName FragmentName = new DataName(String.Empty);
 
 		#endregion Constants
 
@@ -121,18 +122,14 @@ namespace JsonFx.Jbst
 
 			// process markup converting code blocks and normalizing whitespace
 			var jbst = this.ProcessMarkup(state, markup);
-
-			// convert markup into JsonML object structure
-			var tokens = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(jbst);
-
-			// force (otherwise lazy) execution so state is populated
-			tokens = new List<Token<CommonTokenType>>(tokens);
-
-			if (((List<Token<CommonTokenType>>)tokens).Count < 1)
+			if (jbst.Count < 1)
 			{
 				// empty input results in nothing
 				return;
 			}
+
+			// convert markup into JsonML object structure
+			var tokens = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(jbst);
 
 			this.EmitGlobals(state, writer);
 
@@ -161,8 +158,12 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private IEnumerable<Token<MarkupTokenType>> ProcessMarkup(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
+		private List<Token<MarkupTokenType>> ProcessMarkup(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
 		{
+			int depth = 0,
+				rootCount = 0;
+			var result = new List<Token<MarkupTokenType>>();
+
 			var enumerator = markup.GetEnumerator();
 			while (enumerator.MoveNext())
 			{
@@ -172,12 +173,18 @@ namespace JsonFx.Jbst
 					case MarkupTokenType.ElementBegin:
 					case MarkupTokenType.ElementVoid:
 					{
+						depth++;
 						switch (token.Name.Prefix.ToLowerInvariant())
 						{
 							case "jbst":
 							{
+								if (depth == 1)
+								{
+									rootCount++;
+								}
+
 								// TODO: process jbst controls
-								yield return token;
+								result.Add(token);
 								break;
 							}
 							case "":
@@ -200,6 +207,8 @@ namespace JsonFx.Jbst
 												}
 												case MarkupTokenType.ElementEnd:
 												{
+													depth--;
+
 													done = true;
 													continue;
 												}
@@ -209,14 +218,25 @@ namespace JsonFx.Jbst
 													enumerator.MoveNext();
 													continue;
 												}
+												case MarkupTokenType.ElementBegin:
+												case MarkupTokenType.ElementVoid:
+												{
+													depth++;
+													continue;
+												}
 											}
 										}
 										break;
 									}
 									default:
 									{
+										if (depth == 1)
+										{
+											rootCount++;
+										}
+
 										// other elements pass through unaffected
-										yield return token;
+										result.Add(token);
 										break;
 									}
 								}
@@ -224,8 +244,13 @@ namespace JsonFx.Jbst
 							}
 							default:
 							{
+								if (depth == 1)
+								{
+									rootCount++;
+								}
+
 								// other prefixes pass through unaffected
-								yield return token;
+								result.Add(token);
 								break;
 							}
 						}
@@ -239,7 +264,12 @@ namespace JsonFx.Jbst
 							Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
 							if (codeBlock != null)
 							{
-								yield return codeBlock;
+								if (depth == 0)
+								{
+									rootCount++;
+								}
+
+								result.Add(codeBlock);
 							}
 						}
 						else
@@ -247,24 +277,79 @@ namespace JsonFx.Jbst
 							string normalized;
 							if (this.NormalizeWhitespace(token.ValueAsString(), out normalized))
 							{
-								yield return new Token<MarkupTokenType>(MarkupTokenType.Primitive, token.Name, normalized);
+								token = new Token<MarkupTokenType>(MarkupTokenType.Primitive, token.Name, normalized);
 							}
-							else
+
+							if (String.IsNullOrEmpty(normalized))
 							{
-								// text which does not need normalization passes through unaffected
-								yield return token;
+								// prune empty text nodes
+								continue;
 							}
+
+							if ((depth == 0) && !StringComparer.Ordinal.Equals(normalized, JbstCompiler.Whitespace))
+							{
+								rootCount++;
+							}
+
+							// text which does not need normalization passes through unaffected
+							result.Add(token);
 						}
+						continue;
+					}
+					case MarkupTokenType.ElementEnd:
+					{
+						depth--;
+
+						// pass through unaffected
+						result.Add(token);
 						continue;
 					}
 					default:
 					{
 						// all others pass through unaffected
-						yield return token;
+						result.Add(token);
 						continue;
 					}
 				}
 			}
+
+			if (rootCount > 1)
+			{
+				// wrap content in a single container root
+
+				// an unnamed element will be preserved in JsonML as a document fragment
+				result.Insert(0, new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, JbstCompiler.FragmentName));
+				result.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+				return result;
+			}
+
+			// trim trailing then leading whitespace
+			bool trailing = true;
+			int last = result.Count-1;
+			while (last >= 0)
+			{
+				var root = (last >= 0) ? (result[trailing ? last : 0]) : null;
+				if (root.TokenType != MarkupTokenType.Primitive ||
+					!StringComparer.Ordinal.Equals(JbstCompiler.Whitespace, root.Value))
+				{
+					if (trailing)
+					{
+						// switch to checking leading
+						trailing = false;
+						continue;
+					}
+
+					// done checking both
+					break;
+				}
+
+				result.RemoveAt(trailing ? last : 0);
+				last--;
+			}
+
+			// should be a single root or empty
+			return result;
 		}
 
 		private Token<MarkupTokenType> ProcessCodeBlock(CompilationState state, UnparsedBlock block)
@@ -479,7 +564,7 @@ namespace JsonFx.Jbst
 		{
 			if (String.IsNullOrEmpty(text))
 			{
-				normalized = text;
+				normalized = String.Empty;
 				return false;
 			}
 
