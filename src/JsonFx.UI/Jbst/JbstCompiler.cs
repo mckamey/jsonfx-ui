@@ -81,7 +81,7 @@ namespace JsonFx.Jbst
 			// translate to script
 			using (StringWriter writer = new StringWriter())
 			{
-				this.Translate(markup, new CompilationState(path), writer);
+				this.Translate(path, markup, writer);
 
 				return writer.GetStringBuilder().ToString();
 			}
@@ -108,23 +108,31 @@ namespace JsonFx.Jbst
 			var markup = new HtmlTokenizer { AutoBalanceTags = true }.GetTokens(input);
 
 			// translate to script
-			this.Translate(markup, new CompilationState(path), output);
+			this.Translate(path, markup, output);
 		}
 
 		#endregion Compile Methods
 
 		#region Translation Methods
 
-		private void Translate(IEnumerable<Token<MarkupTokenType>> markup, CompilationState state, TextWriter writer)
+		private void Translate(string path, IEnumerable<Token<MarkupTokenType>> markup, TextWriter writer)
 		{
+			CompilationState state = new CompilationState(path);
+
 			// process markup converting code blocks and normalizing whitespace
-			var jbst = this.ProcessMarkup(markup, state);
+			var jbst = this.ProcessMarkup(state, markup);
 
 			// convert markup into JsonML object structure
 			var tokens = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(jbst);
 
 			// force (otherwise lazy) execution so state is populated
 			tokens = new List<Token<CommonTokenType>>(tokens);
+
+			if (((List<Token<CommonTokenType>>)tokens).Count < 1)
+			{
+				// empty input results in nothing
+				return;
+			}
 
 			this.EmitGlobals(state, writer);
 
@@ -138,7 +146,7 @@ namespace JsonFx.Jbst
 			writer.Write(state.JbstName);
 			writer.WriteLine(" = JsonML.BST(");
 
-			var formatter = new EcmaScriptFormatter(this.Settings, true);
+			var formatter = new EcmaScriptFormatter(this.Settings);
 
 			// emit template body
 			formatter.Format(tokens, writer);
@@ -153,7 +161,7 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private IEnumerable<Token<MarkupTokenType>> ProcessMarkup(IEnumerable<Token<MarkupTokenType>> markup, CompilationState state)
+		private IEnumerable<Token<MarkupTokenType>> ProcessMarkup(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
 		{
 			var enumerator = markup.GetEnumerator();
 			while (enumerator.MoveNext())
@@ -228,7 +236,7 @@ namespace JsonFx.Jbst
 						var block = token.Value as UnparsedBlock;
 						if (block != null)
 						{
-							Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(block, state);
+							Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
 							if (codeBlock != null)
 							{
 								yield return codeBlock;
@@ -259,14 +267,14 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private Token<MarkupTokenType> ProcessCodeBlock(UnparsedBlock block, CompilationState state)
+		private Token<MarkupTokenType> ProcessCodeBlock(CompilationState state, UnparsedBlock block)
 		{
 			switch (block.Begin)
 			{
 				case "%@":
 				{
 					// store directive for specialized parsing
-					this.ProcessDirective(block, state);
+					this.ProcessDirective(state, block);
 					return null;
 				}
 				case "%!":
@@ -315,7 +323,7 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private void ProcessDirective(UnparsedBlock block, CompilationState state)
+		private void ProcessDirective(CompilationState state, UnparsedBlock block)
 		{
 			string asTag = String.Concat('<', (block.Value ?? "").TrimStart(), '>');
 
