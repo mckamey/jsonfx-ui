@@ -31,12 +31,19 @@
 using System;
 using System.Collections.Generic;
 
-using JsonFx.Markup;
-
 namespace JsonFx.Jbst
 {
 	internal class CompilationState
 	{
+		#region Fields
+
+		private string jbstName;
+		public readonly string Path;
+		public readonly List<string> Imports = new List<string>();
+		public readonly JbstDeclarationBlock DeclarationBlock = new JbstDeclarationBlock();
+
+		#endregion Fields
+
 		#region Init
 
 		/// <summary>
@@ -49,15 +56,6 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
-
-		#region Fields
-
-		private string jbstName;
-		public readonly string Path;
-		public readonly List<string> Imports = new List<string>();
-		public readonly JbstDeclarationBlock DeclarationBlock = new JbstDeclarationBlock();
-
-		#endregion Fields
 
 		#region Properties
 

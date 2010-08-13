@@ -36,6 +36,7 @@ using System.Text.RegularExpressions;
 using JsonFx.Common;
 using JsonFx.EcmaScript;
 using JsonFx.Html;
+using JsonFx.IO;
 using JsonFx.JsonML;
 using JsonFx.Markup;
 using JsonFx.Serialization;
@@ -53,6 +54,7 @@ namespace JsonFx.Jbst
 		private const string Whitespace = " ";
 		private static readonly Regex RegexWhitespace = new Regex(@"\s+", RegexOptions.Compiled|RegexOptions.CultureInvariant);
 		private static readonly DataName FragmentName = new DataName(String.Empty);
+		private static readonly DataName ScriptName = new DataName("script");
 
 		#endregion Constants
 
@@ -82,7 +84,7 @@ namespace JsonFx.Jbst
 			// translate to script
 			using (StringWriter writer = new StringWriter())
 			{
-				this.Translate(path, markup, writer);
+				this.Compile(path, markup, writer);
 
 				return writer.GetStringBuilder().ToString();
 			}
@@ -109,19 +111,21 @@ namespace JsonFx.Jbst
 			var markup = new HtmlTokenizer { AutoBalanceTags = true }.GetTokens(input);
 
 			// translate to script
-			this.Translate(path, markup, output);
+			this.Compile(path, markup, output);
 		}
 
-		#endregion Compile Methods
-
-		#region Translation Methods
-
-		private void Translate(string path, IEnumerable<Token<MarkupTokenType>> markup, TextWriter writer)
+		/// <summary>
+		/// Compiles the JBST template into executable JavaScript
+		/// </summary>
+		/// <param name="path"></param>
+		/// <param name="markup"></param>
+		/// <param name="output"></param>
+		private void Compile(string path, IEnumerable<Token<MarkupTokenType>> markup, TextWriter output)
 		{
 			CompilationState state = new CompilationState(path);
 
 			// process markup converting code blocks and normalizing whitespace
-			var jbst = this.ProcessMarkup(state, markup);
+			var jbst = this.ProcessTemplate(state, markup);
 			if (jbst.Count < 1)
 			{
 				// empty input results in nothing
@@ -131,136 +135,98 @@ namespace JsonFx.Jbst
 			// convert markup into JsonML object structure
 			var tokens = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(jbst);
 
-			this.EmitGlobals(state, writer);
+			this.EmitGlobals(state, output);
 
 			// emit namespace or variable
-			if (!EcmaScriptFormatter.WriteNamespaceDeclaration(writer, state.JbstName, null, true))
+			if (!EcmaScriptFormatter.WriteNamespaceDeclaration(output, state.JbstName, null, true))
 			{
-				writer.Write("var ");
+				output.Write("var ");
 			}
 
 			// wrap with ctor and assign
-			writer.Write(state.JbstName);
-			writer.WriteLine(" = JsonML.BST(");
+			output.Write(state.JbstName);
+			output.WriteLine(" = JsonML.BST(");
 
 			var formatter = new EcmaScriptFormatter(this.Settings);
 
 			// emit template body
-			formatter.Format(tokens, writer);
+			formatter.Format(tokens, output);
 
-			writer.WriteLine(");");
+			output.WriteLine(");");
 
 			// render any declarations
 			if (state.DeclarationBlock.HasCode)
 			{
 				state.DeclarationBlock.OwnerName = state.JbstName;
-				formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, state.DeclarationBlock) }, writer);
+				formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, state.DeclarationBlock) }, output);
 			}
 		}
 
-		private List<Token<MarkupTokenType>> ProcessMarkup(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
+		#endregion Compile Methods
+
+		#region Processing Methods
+
+		/// <summary>
+		/// Translates the template from markup to a JsonML+BST structure
+		/// </summary>
+		/// <param name="state"></param>
+		/// <param name="markup"></param>
+		/// <returns></returns>
+		private List<Token<MarkupTokenType>> ProcessTemplate(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
 		{
-			int depth = 0,
-				rootCount = 0;
+			int rootCount = 0,
+				depth = 0;
+
 			var result = new List<Token<MarkupTokenType>>();
 
-			var enumerator = markup.GetEnumerator();
-			while (enumerator.MoveNext())
+			var stream = Stream<Token<MarkupTokenType>>.Create(markup);
+			while (!stream.IsCompleted)
 			{
-				var token = enumerator.Current;
+				var token = stream.Peek();
 				switch (token.TokenType)
 				{
 					case MarkupTokenType.ElementBegin:
 					case MarkupTokenType.ElementVoid:
 					{
-						depth++;
-						switch (token.Name.Prefix.ToLowerInvariant())
+						if (StringComparer.OrdinalIgnoreCase.Equals(token.Name.Prefix, "jbst"))
 						{
-							case "jbst":
+							if (depth == 0)
 							{
-								if (depth == 1)
-								{
-									rootCount++;
-								}
-
-								// TODO: process jbst controls
-								result.Add(token);
-								break;
+								rootCount++;
 							}
-							case "":
+
+							// process declarative template markup
+							this.ProcessJbstCommand(result, stream);
+						}
+						else if (token.Name == JbstCompiler.ScriptName)
+						{
+							// process declaration block
+							this.ProcessScriptBlock(state, stream);
+						}
+						else
+						{
+							if (depth == 0)
 							{
-								switch (token.Name.LocalName.ToLowerInvariant())
-								{
-									case "script":
-									{
-										// process declaration block
-										bool done = false;
-										while (!done && enumerator.MoveNext())
-										{
-											token = enumerator.Current;
-											switch (token.TokenType)
-											{
-												case MarkupTokenType.Primitive:
-												{
-													state.DeclarationBlock.Append(token.ValueAsString());
-													continue;
-												}
-												case MarkupTokenType.ElementEnd:
-												{
-													depth--;
-
-													done = true;
-													continue;
-												}
-												case MarkupTokenType.Attribute:
-												{
-													// skip attribute value
-													enumerator.MoveNext();
-													continue;
-												}
-												case MarkupTokenType.ElementBegin:
-												case MarkupTokenType.ElementVoid:
-												{
-													depth++;
-													continue;
-												}
-											}
-										}
-										break;
-									}
-									default:
-									{
-										if (depth == 1)
-										{
-											rootCount++;
-										}
-
-										// other elements pass through unaffected
-										result.Add(token);
-										break;
-									}
-								}
-								break;
+								rootCount++;
 							}
-							default:
+
+							if (token.TokenType == MarkupTokenType.ElementBegin)
 							{
-								if (depth == 1)
-								{
-									rootCount++;
-								}
-
-								// other prefixes pass through unaffected
-								result.Add(token);
-								break;
+								depth++;
 							}
+
+							// other elements pass through to the output unaffected
+							result.Add(stream.Pop());
 						}
 						continue;
 					}
 					case MarkupTokenType.Primitive:
 					{
+						stream.Pop();
 						var block = token.Value as UnparsedBlock;
 						if (block != null)
 						{
+							// interpret an unparsed block
 							Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
 							if (codeBlock != null)
 							{
@@ -274,40 +240,23 @@ namespace JsonFx.Jbst
 						}
 						else
 						{
-							string normalized;
-							if (this.NormalizeWhitespace(token.ValueAsString(), out normalized))
-							{
-								token = new Token<MarkupTokenType>(MarkupTokenType.Primitive, token.Name, normalized);
-							}
-
-							if (String.IsNullOrEmpty(normalized))
-							{
-								// prune empty text nodes
-								continue;
-							}
-
-							if ((depth == 0) && !StringComparer.Ordinal.Equals(normalized, JbstCompiler.Whitespace))
+							if (this.ProcessLiteralText(result, token) &&
+								(depth == 0))
 							{
 								rootCount++;
 							}
-
-							// text which does not need normalization passes through unaffected
-							result.Add(token);
 						}
 						continue;
 					}
 					case MarkupTokenType.ElementEnd:
 					{
 						depth--;
-
-						// pass through unaffected
-						result.Add(token);
-						continue;
+						goto default;
 					}
 					default:
 					{
 						// all others pass through unaffected
-						result.Add(token);
+						result.Add(stream.Pop());
 						continue;
 					}
 				}
@@ -315,41 +264,48 @@ namespace JsonFx.Jbst
 
 			if (rootCount > 1)
 			{
-				// wrap content in a single container root
-
-				// an unnamed element will be preserved in JsonML as a document fragment
-				result.Insert(0, new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, JbstCompiler.FragmentName));
-				result.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
-
-				return result;
+				return this.WrapTemplateRoot(result);
 			}
 
-			// trim trailing then leading whitespace
-			bool trailing = true;
-			int last = result.Count-1;
-			while (last >= 0)
+			return this.TrimTemplateRoot(result);
+		}
+
+		private void ProcessJbstCommand(List<Token<MarkupTokenType>> result, IStream<Token<MarkupTokenType>> stream)
+		{
+			// TODO: process jbst controls
+			result.Add(stream.Pop());
+		}
+
+		/// <summary>
+		/// Processes a script block as a declaration
+		/// </summary>
+		/// <param name="state"></param>
+		/// <param name="stream"></param>
+		private void ProcessScriptBlock(CompilationState state, IStream<Token<MarkupTokenType>> stream)
+		{
+			stream.Pop();
+			while (!stream.IsCompleted)
 			{
-				var root = (last >= 0) ? (result[trailing ? last : 0]) : null;
-				if (root.TokenType != MarkupTokenType.Primitive ||
-					!StringComparer.Ordinal.Equals(JbstCompiler.Whitespace, root.Value))
+				var token = stream.Pop();
+				switch (token.TokenType)
 				{
-					if (trailing)
+					case MarkupTokenType.Primitive:
 					{
-						// switch to checking leading
-						trailing = false;
+						state.DeclarationBlock.Append(token.ValueAsString());
 						continue;
 					}
-
-					// done checking both
-					break;
+					case MarkupTokenType.ElementEnd:
+					{
+						return;
+					}
+					case MarkupTokenType.Attribute:
+					{
+						// skip attribute value
+						stream.Pop();
+						continue;
+					}
 				}
-
-				result.RemoveAt(trailing ? last : 0);
-				last--;
 			}
-
-			// should be a single root or empty
-			return result;
 		}
 
 		/// <summary>
@@ -373,6 +329,7 @@ namespace JsonFx.Jbst
 				}
 				case "%!":
 				{
+					// equivalent syntax to an inline script tag
 					// analogous to static code, or JSP declarations
 					// executed only on initialization of template
 					// output from declarations are applied to the template
@@ -433,13 +390,14 @@ namespace JsonFx.Jbst
 			}
 
 			string asTag = String.Concat('<', block.Value.TrimStart(), '>');
-			var enumerator = new HtmlTokenizer().GetTokens(asTag).GetEnumerator();
-			if (!enumerator.MoveNext())
+
+			var stream = Stream<Token<MarkupTokenType>>.Create(new HtmlTokenizer().GetTokens(asTag));
+			if (stream.IsCompleted)
 			{
 				return;
 			}
 
-			var token = enumerator.Current;
+			var token = stream.Pop();
 			var tokenType = token.TokenType;
 			if (tokenType != MarkupTokenType.ElementBegin &&
 				tokenType != MarkupTokenType.ElementVoid)
@@ -452,87 +410,93 @@ namespace JsonFx.Jbst
 				case "page":
 				case "control":
 				{
-					while (enumerator.MoveNext())
+					this.ProcessTemplateDirective(state, stream);
+					return;
+				}
+				case "import":
+				{
+					while (!stream.IsCompleted)
 					{
-						token = enumerator.Current;
+						token = stream.Pop();
 						if (token.TokenType != MarkupTokenType.Attribute)
 						{
-							throw new InvalidOperationException("Unexpected directive attribute name: "+token);
+							throw new InvalidOperationException("Unexpected token in directive: "+token);
 						}
-						if (!enumerator.MoveNext())
+						if (stream.IsCompleted)
 						{
 							return;
 						}
 						string attrName = token.Name.LocalName;
-						token = enumerator.Current;
+						token = stream.Pop();
 						if (token.TokenType != MarkupTokenType.Primitive)
 						{
-							throw new InvalidOperationException("Unexpected directive attribute value: "+token);
+							throw new InvalidOperationException("Unexpected token in directive: "+token);
 						}
 
-						switch (attrName.ToLowerInvariant())
+						if (StringComparer.OrdinalIgnoreCase.Equals(attrName, "namespace"))
 						{
-							case "name":
-							{
-								state.JbstName = EcmaScriptIdentifier.EnsureValidIdentifier(token.ValueAsString(), true);
-								break;
-							}
-							case "automarkup":
-							{
-								try
-								{
-									state.AutoMarkup = (AutoMarkupType)Enum.Parse(typeof(AutoMarkupType), token.ValueAsString(), true);
-								}
-								catch
-								{
-									throw new ArgumentException("\""+token.ValueAsString()+"\" is an invalid value for AutoMarkup.");
-								}
-								break;
-							}
-							case "import":
-							{
-								string package = token.ValueAsString();
-								if (!String.IsNullOrEmpty(package))
-								{
-									string[] packages = package.Split(JbstCompiler.ImportDelim, StringSplitOptions.RemoveEmptyEntries);
-									state.Imports.AddRange(packages);
-								}
-								break;
-							}
+							state.Imports.Add(token.ValueAsString());
 						}
 					}
 					break;
 				}
-				case "import":
-				{
-					while (enumerator.MoveNext())
-					{
-						token = enumerator.Current;
-						if (token.TokenType != MarkupTokenType.Attribute)
-						{
-							throw new InvalidOperationException("Unexpected token in directive: "+token);
-						}
-						if (!enumerator.MoveNext())
-						{
-							return;
-						}
-						string attrName = token.Name.LocalName;
-						token = enumerator.Current;
-						if (token.TokenType != MarkupTokenType.Primitive)
-						{
-							throw new InvalidOperationException("Unexpected token in directive: "+token);
-						}
+			}
+		}
 
-						switch (attrName.ToLowerInvariant())
-						{
-							case "namespace":
-							{
-								state.Imports.Add(token.ValueAsString());
-								break;
-							}
-						}
+		/// <summary>
+		/// 
+		/// </summary>
+		/// <param name="state"></param>
+		/// <param name="stream"></param>
+		private void ProcessTemplateDirective(CompilationState state, IStream<Token<MarkupTokenType>> stream)
+		{
+			while (!stream.IsCompleted)
+			{
+				var token = stream.Pop();
+				if (token.TokenType != MarkupTokenType.Attribute)
+				{
+					throw new InvalidOperationException("Unexpected directive attribute name: "+token);
+				}
+				if (stream.IsCompleted)
+				{
+					return;
+				}
+				string attrName = token.Name.LocalName;
+				token = stream.Pop();
+				if (token.TokenType != MarkupTokenType.Primitive)
+				{
+					throw new InvalidOperationException("Unexpected directive attribute value: "+token);
+				}
+
+				switch (attrName.ToLowerInvariant())
+				{
+					case "name":
+					{
+						state.JbstName = EcmaScriptIdentifier.EnsureValidIdentifier(token.ValueAsString(), true);
+						break;
 					}
-					break;
+					case "automarkup":
+					{
+						try
+						{
+							state.AutoMarkup = (AutoMarkupType)Enum.Parse(typeof(AutoMarkupType), token.ValueAsString(), true);
+						}
+						catch
+						{
+							throw new ArgumentException("\""+token.ValueAsString()+"\" is an invalid value for AutoMarkup.");
+						}
+						break;
+					}
+					case "import":
+					{
+						string package = token.ValueAsString();
+						if (!String.IsNullOrEmpty(package))
+						{
+							string[] packages = package.Split(JbstCompiler.ImportDelim, StringSplitOptions.RemoveEmptyEntries);
+							state.Imports.AddRange(packages);
+						}
+						break;
+					}
 				}
 			}
 		}
@@ -575,6 +539,85 @@ namespace JsonFx.Jbst
 		}
 
 		/// <summary>
+		/// Wrap content in a single container root
+		/// </summary>
+		/// <param name="result"></param>
+		/// <returns></returns>
+		private List<Token<MarkupTokenType>> WrapTemplateRoot(List<Token<MarkupTokenType>> result)
+		{
+			// an unnamed element will be preserved in JsonML as a document fragment
+			result.Insert(0, new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, JbstCompiler.FragmentName));
+			result.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+			return result;
+		}
+
+		/// <summary>
+		/// Trims empty or whitespace nodes leaving a single root container
+		/// </summary>
+		/// <param name="result"></param>
+		/// <returns></returns>
+		private List<Token<MarkupTokenType>> TrimTemplateRoot(List<Token<MarkupTokenType>> result)
+		{
+			// trim trailing then leading whitespace
+			bool trailing = true;
+			int last = result.Count-1;
+
+			while (last >= 0)
+			{
+				var root = (last >= 0) ? (result[trailing ? last : 0]) : null;
+				if (root.TokenType != MarkupTokenType.Primitive ||
+					!StringComparer.Ordinal.Equals(JbstCompiler.Whitespace, root.Value))
+				{
+					if (trailing)
+					{
+						// switch to checking leading
+						trailing = false;
+						continue;
+					}
+
+					// done checking both
+					break;
+				}
+
+				result.RemoveAt(trailing ? last : 0);
+				last--;
+			}
+
+			// should be a single root or empty list
+			return result;
+		}
+
+		/// <summary>
+		/// Normalized literal text whitespace since HTML will do this anyway
+		/// </summary>
+		/// <param name="result"></param>
+		/// <param name="token"></param>
+		/// <param name="isRoot"></param>
+		/// <returns>if resulted in non-whitespace text</returns>
+		private bool ProcessLiteralText(List<Token<MarkupTokenType>> result, Token<MarkupTokenType> token)
+		{
+			string normalized;
+			if (this.NormalizeWhitespace(token.ValueAsString(), out normalized))
+			{
+				// extraneous whitespace was normalized
+				token = new Token<MarkupTokenType>(MarkupTokenType.Primitive, token.Name, normalized);
+			}
+
+			if (String.IsNullOrEmpty(normalized))
+			{
+				// prune empty text nodes
+				return false;
+			}
+
+			// text which does not need normalization passes through unaffected
+			result.Add(token);
+
+			// non-whitespace text node was at root
+			return !StringComparer.Ordinal.Equals(normalized, JbstCompiler.Whitespace);
+		}
+
+		/// <summary>
 		/// Replaces string of whitespace with a single space
 		/// </summary>
 		/// <param name="text"></param>
@@ -594,6 +637,6 @@ namespace JsonFx.Jbst
 			return !StringComparer.Ordinal.Equals(normalized, text);
 		}
 
-		#endregion Translation Methods
+		#endregion Processing Methods
 	}
 }
