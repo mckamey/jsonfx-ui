@@ -178,8 +178,31 @@ namespace JsonFx.Jbst
 								{
 									case "script":
 									{
-										// TODO: process jbst controls
-										yield return token;
+										// process declaration block
+										bool done = false;
+										while (!done && enumerator.MoveNext())
+										{
+											token = enumerator.Current;
+											switch (token.TokenType)
+											{
+												case MarkupTokenType.Primitive:
+												{
+													state.DeclarationBlock.Append(token.ValueAsString());
+													continue;
+												}
+												case MarkupTokenType.ElementEnd:
+												{
+													done = true;
+													continue;
+												}
+												case MarkupTokenType.Attribute:
+												{
+													// skip attribute value
+													enumerator.MoveNext();
+													continue;
+												}
+											}
+										}
 										break;
 									}
 									default:
