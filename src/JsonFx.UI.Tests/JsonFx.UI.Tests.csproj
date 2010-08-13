@@ -13,6 +13,7 @@
     <RootNamespace>JsonFx</RootNamespace>
     <AssemblyName>JsonFx.UI.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
     <OutputAssemblyLabel>$(Configuration)_$(TargetFrameworkVersion)</OutputAssemblyLabel>
     <OutputAssemblyLabel Condition=" '$(TargetFrameworkIdentifier)' != '' ">$(Configuration)_$(TargetFrameworkVersion)_$(TargetFrameworkIdentifier)</OutputAssemblyLabel>
     <OutputAssemblyLabel Condition=" '$(TargetFrameworkProfile)' != '' And '$(TargetFrameworkProfile)' != 'Client' ">$(Configuration)_$(TargetFrameworkVersion)_$(TargetFrameworkProfile)</OutputAssemblyLabel>
@@ -23,7 +24,6 @@
     <IsWebBootstrapper>false</IsWebBootstrapper>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
-    <TargetFrameworkProfile />
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
@@ -88,6 +88,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AssertPatched.cs" />
+    <Compile Include="Jbst\JbstCompilerTests.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\JsonFx.UI\JsonFx.UI.csproj">
