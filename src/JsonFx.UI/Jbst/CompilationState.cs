@@ -52,9 +52,10 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
+		private string jbstName;
 		public readonly string Path;
 		public readonly List<string> Imports = new List<string>();
-		public readonly JbstDeclarationBlock Declarations = new JbstDeclarationBlock();
+		public readonly JbstDeclarationBlock DeclarationBlock = new JbstDeclarationBlock();
 
 		#endregion Fields
 
@@ -62,8 +63,15 @@ namespace JsonFx.Jbst
 
 		public string JbstName
 		{
-			get;
-			set;
+			get
+			{
+				if (String.IsNullOrEmpty(this.jbstName))
+				{
+					this.jbstName = String.Concat('$', Guid.NewGuid().ToString("n"));
+				}
+				return this.jbstName;
+			}
+			set { this.jbstName = value; }
 		}
 
 		public AutoMarkupType AutoMarkup

@@ -50,62 +50,63 @@ namespace JsonFx.Jbst
 
 		#region Foo Tests
 
-		[Fact]
-		[Trait(TraitName, TraitValue)]
-		public void Compile_MyZebraList_RendersJbst()
-		{
-			var input = @"<%@ Control Name=""Foo.MyZebraList"" Language=""JavaScript"" %>
+		// TODO: PrettyPrinting is forced, compaction isn't performed during compilation
+//        [Fact]
+//        [Trait(TraitName, TraitValue)]
+//        public void Compile_MyZebraList_RendersJbst()
+//        {
+//            var input = @"<%@ Control Name=""Foo.MyZebraList"" Language=""JavaScript"" %>
+//
+//<script type=""text/javascript"">
+//
+//	/* private members ------------------------------------------ */
+//
+//	/*int*/ function digits(/*int*/ n) {
+//		return (n < 10) ? '0' + n : n;
+//	}
+//
+//	/* public members ------------------------------------------- */
+//
+//	// use the item index to alternate colors and highlight
+//	/*string*/ this.zebraStripe = function(/*bool*/ selected, /*int*/ index, /*int*/ count) {
+//		var css = [ ""item"" ];
+//		if (index % 2 === 0) {
+//			css.push(""item-alt"");
+//		}
+//		if (selected) {
+//			css.push(""item-selected"");
+//		}
+//		return css.join("" "");
+//	};
+//
+//	/*string*/ this.formatTime = function(/*Date*/ time) {
+//		return time.getHours() + ':' + digits(time.getMinutes()) + ':' + digits(time.getSeconds());
+//	};
+//
+//</script>
+//
+//<div class=""example"">
+//	<h2><%= this.data.title %> as of <%= this.formatTime(this.data.timestamp) %>!</h2>
+//	<p><%= this.data.description %></p>
+//	<ul class=""items"" jbst:visible=""<%= this.data.children.length > 0 %>"">
+//
+//		<!-- anonymous inner template -->
+//		<jbst:control data=""<%= this.data.children %>"">
+//			<!-- populate list item for each item of the parent's children property -->
+//			<li class=""<%= Foo.MyZebraList.zebraStripe(this.data.selected, this.index, this.count) %>"">
+//				<%= this.data.label %> (<%= this.index+1 %> of <%= this.count %>)
+//			</li>
+//		</jbst:control>
+//
+//	</ul>
+//</div>";
 
-<script type=""text/javascript"">
+//            var expected = @"var Foo;if(""undefined""===typeof Foo){Foo={};}Foo.MyZebraList=JsonML.BST([""div"",{""class"":""example""},"" "",[""h2"",function(){return this.data.title;},"" as of "",function(){return this.formatTime(this.data.timestamp);},""!""],"" "",[""p"",function(){return this.data.description;}],"" "",[""ul"",{""class"":""items"",""jbst:visible"":function(){return this.data.children.length>0;}},"" "","""","" "",function(){return JsonML.BST(["""","" "","""","" "",[""li"",{""class"":function(){return Foo.MyZebraList.zebraStripe(this.data.selected,this.index,this.count);}},"" "",function(){return this.data.label;},"" ("",function(){return this.index+1;},"" of "",function(){return this.count;},"") ""],"" ""]).dataBind(this.data.children,this.index,this.count);},"" ""],""\n""]);(function(){function A(B){return(B<10)?""0""+B:B;}this.zebraStripe=function(B,C,D){var E=[""item""];if(C%2===0){E.push(""item-alt"");}if(B){E.push(""item-selected"");}return E.join("" "");};this.formatTime=function(B){return B.getHours()+"":""+A(B.getMinutes())+"":""+A(B.getSeconds());};}).call(Foo.MyZebraList);";
 
-	/* private members ------------------------------------------ */
+//            var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
 
-	/*int*/ function digits(/*int*/ n) {
-		return (n < 10) ? '0' + n : n;
-	}
-
-	/* public members ------------------------------------------- */
-
-	// use the item index to alternate colors and highlight
-	/*string*/ this.zebraStripe = function(/*bool*/ selected, /*int*/ index, /*int*/ count) {
-		var css = [ ""item"" ];
-		if (index % 2 === 0) {
-			css.push(""item-alt"");
-		}
-		if (selected) {
-			css.push(""item-selected"");
-		}
-		return css.join("" "");
-	};
-
-	/*string*/ this.formatTime = function(/*Date*/ time) {
-		return time.getHours() + ':' + digits(time.getMinutes()) + ':' + digits(time.getSeconds());
-	};
-
-</script>
-
-<div class=""example"">
-	<h2><%= this.data.title %> as of <%= this.formatTime(this.data.timestamp) %>!</h2>
-	<p><%= this.data.description %></p>
-	<ul class=""items"" jbst:visible=""<%= this.data.children.length > 0 %>"">
-
-		<!-- anonymous inner template -->
-		<jbst:control data=""<%= this.data.children %>"">
-			<!-- populate list item for each item of the parent's children property -->
-			<li class=""<%= Foo.MyZebraList.zebraStripe(this.data.selected, this.index, this.count) %>"">
-				<%= this.data.label %> (<%= this.index+1 %> of <%= this.count %>)
-			</li>
-		</jbst:control>
-
-	</ul>
-</div>";
-
-			var expected = @"var Foo;if(""undefined""===typeof Foo){Foo={};}Foo.MyZebraList=JsonML.BST([""div"",{""class"":""example""},"" "",[""h2"",function(){return this.data.title;},"" as of "",function(){return this.formatTime(this.data.timestamp);},""!""],"" "",[""p"",function(){return this.data.description;}],"" "",[""ul"",{""class"":""items"",""jbst:visible"":function(){return this.data.children.length>0;}},"" "","""","" "",function(){return JsonML.BST(["""","" "","""","" "",[""li"",{""class"":function(){return Foo.MyZebraList.zebraStripe(this.data.selected,this.index,this.count);}},"" "",function(){return this.data.label;},"" ("",function(){return this.index+1;},"" of "",function(){return this.count;},"") ""],"" ""]).dataBind(this.data.children,this.index,this.count);},"" ""],""\n""]);(function(){function A(B){return(B<10)?""0""+B:B;}this.zebraStripe=function(B,C,D){var E=[""item""];if(C%2===0){E.push(""item-alt"");}if(B){E.push(""item-selected"");}return E.join("" "");};this.formatTime=function(B){return B.getHours()+"":""+A(B.getMinutes())+"":""+A(B.getSeconds());};}).call(Foo.MyZebraList);";
-
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
-
-			Assert.Equal(expected, actual);
-		}
+//            Assert.Equal(expected, actual);
+//        }
 
 		[Fact]
 		[Trait(TraitName, TraitValue)]
@@ -265,7 +266,7 @@ Foo.MyZebraList = JsonML.BST(
 	};
 }).call(Foo.MyZebraList);";
 
-			var actual = new JbstCompiler(new DataWriterSettings { PrettyPrint=true }).Compile("~/Foo.jbst", input);
+			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
 
 			Assert.Equal(expected, actual);
 		}
