@@ -124,8 +124,10 @@ namespace JsonFx.Jbst
 		{
 			CompilationState state = new CompilationState(path);
 
+			var stream = Stream<Token<MarkupTokenType>>.Create(markup, true);
+
 			// process markup converting code blocks and normalizing whitespace
-			var jbst = this.ProcessTemplate(state, markup);
+			var jbst = this.ProcessTemplate(state, stream);
 			if (jbst.Count < 1)
 			{
 				// empty input results in nothing
@@ -172,15 +174,15 @@ namespace JsonFx.Jbst
 		/// <param name="state"></param>
 		/// <param name="markup"></param>
 		/// <returns></returns>
-		private List<Token<MarkupTokenType>> ProcessTemplate(CompilationState state, IEnumerable<Token<MarkupTokenType>> markup)
+		private List<Token<MarkupTokenType>> ProcessTemplate(CompilationState state, IStream<Token<MarkupTokenType>> stream)
 		{
 			int rootCount = 0,
 				depth = 0;
 
-			var result = new List<Token<MarkupTokenType>>();
+			var output = new List<Token<MarkupTokenType>>();
 
-			var stream = Stream<Token<MarkupTokenType>>.Create(markup);
-			while (!stream.IsCompleted)
+			bool done = false;
+			while (!done && !stream.IsCompleted)
 			{
 				var token = stream.Peek();
 				switch (token.TokenType)
@@ -196,7 +198,7 @@ namespace JsonFx.Jbst
 							}
 
 							// process declarative template markup
-							this.ProcessJbstCommand(result, stream);
+							this.ProcessJbstCommand(stream, output);
 						}
 						else if (token.Name == JbstCompiler.ScriptName)
 						{
@@ -216,7 +218,7 @@ namespace JsonFx.Jbst
 							}
 
 							// other elements pass through to the output unaffected
-							result.Add(stream.Pop());
+							output.Add(stream.Pop());
 						}
 						continue;
 					}
@@ -235,12 +237,12 @@ namespace JsonFx.Jbst
 									rootCount++;
 								}
 
-								result.Add(codeBlock);
+								output.Add(codeBlock);
 							}
 						}
 						else
 						{
-							if (this.ProcessLiteralText(result, token) &&
+							if (this.ProcessLiteralText(output, token) &&
 								(depth == 0))
 							{
 								rootCount++;
@@ -250,13 +252,21 @@ namespace JsonFx.Jbst
 					}
 					case MarkupTokenType.ElementEnd:
 					{
+						if (depth == 0)
+						{
+							// this has been auto-balaced so an extra ElementEnd
+							// means we've reached end of parent container
+							done = true;
+							continue;
+						}
+
 						depth--;
 						goto default;
 					}
 					default:
 					{
 						// all others pass through unaffected
-						result.Add(stream.Pop());
+						output.Add(stream.Pop());
 						continue;
 					}
 				}
@@ -264,13 +274,17 @@ namespace JsonFx.Jbst
 
 			if (rootCount > 1)
 			{
-				return this.WrapTemplateRoot(result);
+				this.WrapTemplateRoot(output);
+			}
+			else
+			{
+				this.TrimTemplateRoot(output);
 			}
 
-			return this.TrimTemplateRoot(result);
+			return output;
 		}
 
-		private void ProcessJbstCommand(List<Token<MarkupTokenType>> result, IStream<Token<MarkupTokenType>> stream)
+		private void ProcessJbstCommand(IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
 		{
 			var token = stream.Pop();
 			DataName commandName = token.Name;
@@ -286,14 +300,14 @@ namespace JsonFx.Jbst
 				}
 				if (stream.IsCompleted)
 				{
-					throw new InvalidOperationException("Unexpected end of stream while processing JBST command");
+					throw new TokenException<MarkupTokenType>(token, "Unexpected end of stream while processing JBST command");
 				}
 
 				string attrName = token.Name.LocalName;
 				token = stream.Pop();
 				if (token.TokenType != MarkupTokenType.Primitive)
 				{
-					throw new InvalidOperationException("Unexpected value for JBST command arg:"+token);
+					throw new TokenException<MarkupTokenType>(token, "Unexpected value for JBST command arg: "+token.TokenType);
 				}
 
 				attributes[attrName] = token.Value;
@@ -330,7 +344,7 @@ namespace JsonFx.Jbst
 					};
 				}
 
-				result.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+				output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
 			}
 		}
 
@@ -460,7 +474,7 @@ namespace JsonFx.Jbst
 			if (tokenType != MarkupTokenType.ElementBegin &&
 				tokenType != MarkupTokenType.ElementVoid)
 			{
-				throw new InvalidOperationException("Unexpected directive element start: "+token);
+				throw new TokenException<MarkupTokenType>(token, "Unexpected directive element start: "+token.TokenType);
 			}
 
 			switch (token.Name.LocalName.ToLowerInvariant())
@@ -478,7 +492,7 @@ namespace JsonFx.Jbst
 						token = stream.Pop();
 						if (token.TokenType != MarkupTokenType.Attribute)
 						{
-							throw new InvalidOperationException("Unexpected token in directive: "+token);
+							throw new TokenException<MarkupTokenType>(token, "Unexpected token in directive: "+token.TokenType);
 						}
 						if (stream.IsCompleted)
 						{
@@ -488,7 +502,7 @@ namespace JsonFx.Jbst
 						token = stream.Pop();
 						if (token.TokenType != MarkupTokenType.Primitive)
 						{
-							throw new InvalidOperationException("Unexpected token in directive: "+token);
+							throw new TokenException<MarkupTokenType>(token, "Unexpected token in directive: "+token.TokenType);
 						}
 
 						if (StringComparer.OrdinalIgnoreCase.Equals(attrName, "namespace"))
@@ -513,7 +527,7 @@ namespace JsonFx.Jbst
 				var token = stream.Pop();
 				if (token.TokenType != MarkupTokenType.Attribute)
 				{
-					throw new InvalidOperationException("Unexpected directive attribute name: "+token);
+					throw new TokenException<MarkupTokenType>(token, "Unexpected directive attribute name: "+token.TokenType);
 				}
 				if (stream.IsCompleted)
 				{
@@ -523,7 +537,7 @@ namespace JsonFx.Jbst
 				token = stream.Pop();
 				if (token.TokenType != MarkupTokenType.Primitive)
 				{
-					throw new InvalidOperationException("Unexpected directive attribute value: "+token);
+					throw new TokenException<MarkupTokenType>(token, "Unexpected directive attribute value: "+token.TokenType);
 				}
 
 				switch (attrName.ToLowerInvariant())
@@ -539,9 +553,9 @@ namespace JsonFx.Jbst
 						{
 							state.AutoMarkup = (AutoMarkupType)Enum.Parse(typeof(AutoMarkupType), token.ValueAsString(), true);
 						}
-						catch
+						catch (Exception ex)
 						{
-							throw new ArgumentException("\""+token.ValueAsString()+"\" is an invalid value for AutoMarkup.");
+							throw new TokenException<MarkupTokenType>(token, "\""+token.ValueAsString()+"\" is an invalid value for AutoMarkup.", ex);
 						}
 						break;
 					}
@@ -601,13 +615,11 @@ namespace JsonFx.Jbst
 		/// </summary>
 		/// <param name="result"></param>
 		/// <returns></returns>
-		private List<Token<MarkupTokenType>> WrapTemplateRoot(List<Token<MarkupTokenType>> result)
+		private void WrapTemplateRoot(List<Token<MarkupTokenType>> result)
 		{
 			// an unnamed element will be preserved in JsonML as a document fragment
 			result.Insert(0, new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, JbstCompiler.FragmentName));
 			result.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
-
-			return result;
 		}
 
 		/// <summary>
@@ -615,7 +627,7 @@ namespace JsonFx.Jbst
 		/// </summary>
 		/// <param name="result"></param>
 		/// <returns></returns>
-		private List<Token<MarkupTokenType>> TrimTemplateRoot(List<Token<MarkupTokenType>> result)
+		private void TrimTemplateRoot(List<Token<MarkupTokenType>> result)
 		{
 			// trim trailing then leading whitespace
 			bool trailing = true;
@@ -643,7 +655,6 @@ namespace JsonFx.Jbst
 			}
 
 			// should be a single root or empty list
-			return result;
 		}
 
 		/// <summary>
