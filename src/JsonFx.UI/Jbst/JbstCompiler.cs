@@ -188,7 +188,7 @@ namespace JsonFx.Jbst
 					case MarkupTokenType.ElementBegin:
 					case MarkupTokenType.ElementVoid:
 					{
-						if (StringComparer.OrdinalIgnoreCase.Equals(token.Name.Prefix, "jbst"))
+						if (StringComparer.OrdinalIgnoreCase.Equals(token.Name.Prefix, JbstCommand.JbstPrefix))
 						{
 							if (depth == 0)
 							{
@@ -272,8 +272,66 @@ namespace JsonFx.Jbst
 
 		private void ProcessJbstCommand(List<Token<MarkupTokenType>> result, IStream<Token<MarkupTokenType>> stream)
 		{
-			// TODO: process jbst controls
-			result.Add(stream.Pop());
+			var token = stream.Pop();
+			DataName commandName = token.Name;
+			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
+
+			IDictionary<string, object> attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+			while (!stream.IsCompleted)
+			{
+				token = stream.Pop();
+				if (token.TokenType != MarkupTokenType.Attribute)
+				{
+					break;
+				}
+				if (stream.IsCompleted)
+				{
+					throw new InvalidOperationException("Unexpected end of stream while processing JBST command");
+				}
+
+				string attrName = token.Name.LocalName;
+				token = stream.Pop();
+				if (token.TokenType != MarkupTokenType.Primitive)
+				{
+					throw new InvalidOperationException("Unexpected value for JBST command arg:"+token);
+				}
+
+				attributes[attrName] = token.Value;
+			}
+
+			if (commandName == JbstTemplateCommand.CommandName)
+			{
+				object name, data, index, count;
+
+				attributes.TryGetValue(JbstTemplateCommand.KeyName, out name);
+				attributes.TryGetValue(JbstTemplateCommand.KeyData, out data);
+				attributes.TryGetValue(JbstTemplateCommand.KeyIndex, out index);
+				attributes.TryGetValue(JbstTemplateCommand.KeyCount, out count);
+
+				JbstTemplateCommand command;
+				if (isVoid && name != null)
+				{
+					command = new JbstTemplateReference
+						{
+							NameExpr = name,
+							DataExpr = data,
+							IndexExpr = index,
+							CountExpr = count
+						};
+				}
+				else
+				{
+					command = new JbstInlineTemplate
+					{
+						NameExpr = name,
+						DataExpr = data,
+						IndexExpr = index,
+						CountExpr = count
+					};
+				}
+
+				result.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+			}
 		}
 
 		/// <summary>

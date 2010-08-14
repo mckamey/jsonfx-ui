@@ -64,7 +64,7 @@ namespace JsonFx.Jbst
 		/// <param name="code"></param>
 		protected JbstCodeBlock(string code)
 		{
-			this.code = (code == null) ? String.Empty : code;
+			this.code = code ?? String.Empty;
 		}
 
 		#endregion Init

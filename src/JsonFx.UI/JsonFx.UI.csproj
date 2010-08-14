@@ -85,6 +85,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Jbst\AutoMarkupType.cs" />
+    <Compile Include="Jbst\JbstCommand.cs" />
     <Compile Include="Jbst\Extensions\AppSettingsJbstExtension.cs" />
     <Compile Include="Jbst\Extensions\JbstExtension.cs" />
     <Compile Include="Jbst\Extensions\ResourceJbstExtension.cs" />
