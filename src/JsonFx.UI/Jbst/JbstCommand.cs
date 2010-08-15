@@ -47,18 +47,9 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region Methods
-
-		protected abstract void WriteCommand(ITextFormatter<CommonTokenType> formatter, TextWriter writer);
-
-		#endregion Methods
-
 		#region ITextFormattable<CommonTokenType> Members
 
-		void ITextFormattable<CommonTokenType>.Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
-		{
-			this.WriteCommand(formatter, writer);
-		}
+		public abstract void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer);
 
 		#endregion ITextFormattable<CommonTokenType> Members
 	}
@@ -129,13 +120,13 @@ namespace JsonFx.Jbst
 			if (argument is string)
 			{
 				// directly use as inline expression
-				return (string)argument;
+				return ((string)argument??"").Trim();
 			}
 
 			if (argument is JbstExpressionBlock)
 			{
 				// convert to inline expression
-				return ((JbstExpressionBlock)argument).Code;
+				return ((JbstExpressionBlock)argument).Code.Trim();
 			}
 
 			if (argument is JbstCodeBlock)
@@ -146,11 +137,11 @@ namespace JsonFx.Jbst
 					((ITextFormattable<CommonTokenType>)argument).Format(formatter, writer);
 
 					// convert to anonymous function call expression
-					return String.Format(JbstTemplateCommand.FunctionEvalExpression, writer.GetStringBuilder().ToString());
+					return String.Format(JbstTemplateCommand.FunctionEvalExpression, writer.GetStringBuilder().ToString().Trim());
 				}
 			}
 
-			// convert to primitive token sequence and format as literal
+			// convert to token sequence and allow formatter to emit as primitive
 			return formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, argument) });
 		}
 
@@ -173,7 +164,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		protected override void WriteCommand(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(
 				JbstTemplateReference.TemplateReferenceFormat,
@@ -203,20 +194,43 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
+		#region Fields
+
+		private bool isEnd;
+
+		#endregion Fields
+
+		#region Methods
+
+		/// <summary>
+		/// Gets the matching end token
+		/// </summary>
+		/// <returns></returns>
+		public JbstInlineTemplate GetInlineEnd()
+		{
+			var end = (JbstInlineTemplate)this.MemberwiseClone();
+			end.isEnd = true;
+			return end;
+		}
+
+		#endregion Methods
+
 		#region JbstCommand Members
 
-		protected override void WriteCommand(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			writer.Write(JbstInlineTemplate.InlineTemplateStart);
-
-			// TODO.
-			writer.Write("/*TODO*/");
-
-			writer.Write(
-				JbstInlineTemplate.InlineTemplateEndFormat,
-				this.RenderExpression(formatter, this.DataExpr),
-				this.RenderExpression(formatter, this.IndexExpr),
-				this.RenderExpression(formatter, this.CountExpr));
+			if (!this.isEnd)
+			{
+				writer.Write(JbstInlineTemplate.InlineTemplateStart);
+			}
+			else
+			{
+				writer.Write(
+					JbstInlineTemplate.InlineTemplateEndFormat,
+					this.RenderExpression(formatter, this.DataExpr),
+					this.RenderExpression(formatter, this.IndexExpr),
+					this.RenderExpression(formatter, this.CountExpr));
+			}
 		}
 
 		#endregion JbstCommand Members
@@ -252,7 +266,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		protected override void WriteCommand(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			// TODO.
 		}
@@ -286,7 +300,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		protected override void WriteCommand(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(JbstPlaceholder.PlaceholderStatementStart);
 

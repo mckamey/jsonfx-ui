@@ -154,14 +154,9 @@ namespace JsonFx.Jbst
 			// emit template body
 			formatter.Format(tokens, output);
 
+			// close ctor and emit init block
 			output.WriteLine(");");
-
-			// render any declarations
-			if (state.DeclarationBlock.HasCode)
-			{
-				state.DeclarationBlock.OwnerName = state.JbstName;
-				formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, state.DeclarationBlock) }, output);
-			}
+			state.DeclarationBlock.Format(formatter, output);
 		}
 
 		#endregion Compile Methods
@@ -198,7 +193,7 @@ namespace JsonFx.Jbst
 							}
 
 							// process declarative template markup
-							this.ProcessJbstCommand(stream, output);
+							this.ProcessJbstCommand(state, stream, output);
 						}
 						else if (token.Name == JbstCompiler.ScriptName)
 						{
@@ -242,8 +237,7 @@ namespace JsonFx.Jbst
 						}
 						else
 						{
-							if (this.ProcessLiteralText(output, token) &&
-								(depth == 0))
+							if (this.ProcessLiteralText(output, token) && (depth == 0))
 							{
 								rootCount++;
 							}
@@ -284,11 +278,16 @@ namespace JsonFx.Jbst
 			return output;
 		}
 
-		private void ProcessJbstCommand(IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
+		private void ProcessJbstCommand(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
 		{
 			var token = stream.Pop();
 			DataName commandName = token.Name;
 			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
+			if (commandName == JbstTemplateCommand.CommandName)
+			{
+				// new inner state for nested control
+				state = new CompilationState(state.Path);
+			}
 
 			IDictionary<string, object> attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 			while (!stream.IsCompleted)
@@ -310,7 +309,20 @@ namespace JsonFx.Jbst
 					throw new TokenException<MarkupTokenType>(token, "Unexpected value for JBST command arg: "+token.TokenType);
 				}
 
-				attributes[attrName] = token.Value;
+				var block = token.Value as UnparsedBlock;
+				if (block != null)
+				{
+					// interpret an unparsed block
+					Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
+					if (codeBlock != null && codeBlock.Value != null)
+					{
+						attributes[attrName] = codeBlock.Value;
+					}
+				}
+				else
+				{
+					attributes[attrName] = token.Value;
+				}
 			}
 
 			if (commandName == JbstTemplateCommand.CommandName)
@@ -322,29 +334,35 @@ namespace JsonFx.Jbst
 				attributes.TryGetValue(JbstTemplateCommand.KeyIndex, out index);
 				attributes.TryGetValue(JbstTemplateCommand.KeyCount, out count);
 
-				JbstTemplateCommand command;
 				if (isVoid && name != null)
 				{
-					command = new JbstTemplateReference
+					var command = new JbstTemplateReference
 						{
 							NameExpr = name,
 							DataExpr = data,
 							IndexExpr = index,
 							CountExpr = count
 						};
+
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
 				}
 				else
 				{
-					command = new JbstInlineTemplate
+					var command = new JbstInlineTemplate
 					{
 						NameExpr = name,
 						DataExpr = data,
 						IndexExpr = index,
 						CountExpr = count
 					};
-				}
 
-				output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+
+					var inner = this.ProcessTemplate(state, stream);
+					output.AddRange(inner);
+
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command.GetInlineEnd()));
+				}
 			}
 		}
 
@@ -660,11 +678,9 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Normalized literal text whitespace since HTML will do this anyway
 		/// </summary>
-		/// <param name="result"></param>
-		/// <param name="token"></param>
-		/// <param name="isRoot"></param>
+		/// <param name="token">value will be normalized or token will be set to null if empty text</param>
 		/// <returns>if resulted in non-whitespace text</returns>
-		private bool ProcessLiteralText(List<Token<MarkupTokenType>> result, Token<MarkupTokenType> token)
+		private bool ProcessLiteralText(List<Token<MarkupTokenType>> output, Token<MarkupTokenType> token)
 		{
 			string normalized;
 			if (this.NormalizeWhitespace(token.ValueAsString(), out normalized))
@@ -680,9 +696,9 @@ namespace JsonFx.Jbst
 			}
 
 			// text which does not need normalization passes through unaffected
-			result.Add(token);
+			output.Add(token);
 
-			// non-whitespace text node was at root
+			// was non-whitespace text node
 			return !StringComparer.Ordinal.Equals(normalized, JbstCompiler.Whitespace);
 		}
 

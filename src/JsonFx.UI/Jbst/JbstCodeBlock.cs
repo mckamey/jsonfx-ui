@@ -42,7 +42,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of a JBST code block.
 	/// </summary>
-	internal abstract class JbstCodeBlock : ITextFormattable<CommonTokenType>
+	internal class JbstCodeBlock : ITextFormattable<CommonTokenType>
 	{
 		#region Constants
 
@@ -62,7 +62,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="code"></param>
-		protected JbstCodeBlock(string code)
+		public JbstCodeBlock(string code)
 		{
 			this.code = code ?? String.Empty;
 		}
@@ -81,17 +81,14 @@ namespace JsonFx.Jbst
 
 		#endregion Properties
 
-		#region Methods
-
-		protected abstract void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer);
-
-		#endregion Methods
-
 		#region ITextFormattable<CommonTokenType> Members
 
-		void ITextFormattable<CommonTokenType>.Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public virtual void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			this.WriteCodeBlock(formatter, writer);
+			if (!String.IsNullOrEmpty(this.code))
+			{
+				writer.Write(this.Code);
+			}
 		}
 
 		#endregion ITextFormattable<CommonTokenType> Members
@@ -121,7 +118,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -130,7 +127,7 @@ namespace JsonFx.Jbst
 			}
 			else
 			{
-				writer.Write(CommentFormat, code.Replace("*/", "* /"));
+				writer.Write(CommentFormat, code.Replace(@"*/", @"*\/"));
 			}
 		}
 
@@ -207,17 +204,13 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
-			if (String.IsNullOrEmpty(code))
+			if (!String.IsNullOrEmpty(code))
 			{
-				writer.Write(JbstCodeBlock.Noop);
-			}
-			else
-			{
-				// output expressions are the core of the syntax
-				writer.Write(DeclarationFormat, this.OwnerName, code);
+				// render any declarations
+				writer.Write(JbstDeclarationBlock.DeclarationFormat, this.OwnerName, code);
 			}
 		}
 
@@ -272,7 +265,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -315,7 +308,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code;
 			if (String.IsNullOrEmpty(code))
@@ -358,7 +351,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -439,7 +432,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		protected override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			// execute the corresponding extension evaluator
 			this.Extension.WriteCodeBlock(formatter, writer);

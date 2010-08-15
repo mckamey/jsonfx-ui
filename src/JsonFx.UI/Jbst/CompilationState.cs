@@ -69,7 +69,7 @@ namespace JsonFx.Jbst
 				}
 				return this.jbstName;
 			}
-			set { this.jbstName = value; }
+			set { this.jbstName = this.DeclarationBlock.OwnerName = value; }
 		}
 
 		public AutoMarkupType AutoMarkup
