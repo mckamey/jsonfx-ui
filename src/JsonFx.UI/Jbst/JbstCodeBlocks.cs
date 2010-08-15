@@ -40,16 +40,119 @@ using JsonFx.Serialization;
 namespace JsonFx.Jbst
 {
 	/// <summary>
-	/// Internal representation of a JBST code block.
+	/// Internal representation of JBST commands
 	/// </summary>
-	internal class JbstCodeBlock : ITextFormattable<CommonTokenType>
+	internal abstract class JbstCommand : ITextFormattable<CommonTokenType>
 	{
 		#region Constants
 
-		protected internal const string Noop = "null";
+		public const string Prefix = "jbst";
+		private const string Noop = "null";
 
 		#endregion Constants
 
+		#region ITextFormattable<CommonTokenType> Members
+
+		public virtual void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		{
+			// emit an innocuous value
+			writer.Write(JbstCommand.Noop);
+		}
+
+		#endregion ITextFormattable<CommonTokenType> Members
+	}
+
+	/// <summary>
+	/// Initialization code for a template
+	/// </summary>
+	internal class JbstDeclarationBlock : JbstCommand
+	{
+		#region Constants
+
+		private const string DeclarationFormat =
+@"// initialize template in the context of ""this""
+(function() {{
+	{1}
+}}).call({0});";
+
+		#endregion Constants
+
+		#region Fields
+
+		private readonly StringBuilder Content = new StringBuilder();
+		private string ownerName;
+
+		#endregion Fields
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		public JbstDeclarationBlock()
+		{
+		}
+
+		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the name of the owning JBST
+		/// </summary>
+		public string OwnerName
+		{
+			get
+			{
+				if (String.IsNullOrEmpty(this.ownerName))
+				{
+					// default to current context
+					this.ownerName = "this";
+				}
+				return this.ownerName;
+			}
+			set { this.ownerName = value; }
+		}
+
+		#endregion Properties
+
+		#region JbstCommand Members
+
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		{
+			string content = this.Content.ToString().Trim();
+			if (String.IsNullOrEmpty(content))
+			{
+				base.Format(formatter, writer);
+			}
+			else
+			{
+				// render any declarations
+				writer.Write(JbstDeclarationBlock.DeclarationFormat, this.OwnerName, content);
+			}
+		}
+
+		#endregion JbstCommand Members
+
+		#region Methods
+
+		/// <summary>
+		/// Append another code block onto declaration block
+		/// </summary>
+		/// <param name="control"></param>
+		public void Append(string code)
+		{
+			this.Content.Append(code);
+		}
+
+		#endregion Methods
+	}
+
+	/// <summary>
+	/// Internal representation of a JBST code block
+	/// </summary>
+	internal class JbstCodeBlock : JbstCommand
+	{
 		#region Fields
 
 		private readonly string code;
@@ -83,9 +186,13 @@ namespace JsonFx.Jbst
 
 		#region ITextFormattable<CommonTokenType> Members
 
-		public virtual void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			if (!String.IsNullOrEmpty(this.code))
+			if (String.IsNullOrEmpty(this.code))
+			{
+				base.Format(formatter, writer);
+			}
+			else
 			{
 				writer.Write(this.Code);
 			}
@@ -94,6 +201,9 @@ namespace JsonFx.Jbst
 		#endregion ITextFormattable<CommonTokenType> Members
 	}
 
+	/// <summary>
+	/// A comment which is 
+	/// </summary>
 	internal class JbstCommentBlock : JbstCodeBlock
 	{
 		#region Constants
@@ -123,7 +233,7 @@ namespace JsonFx.Jbst
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
 			{
-				writer.Write(JbstCodeBlock.Noop);
+				base.Format(formatter, writer);
 			}
 			else
 			{
@@ -134,111 +244,9 @@ namespace JsonFx.Jbst
 		#endregion JbstCodeBlock Members
 	}
 
-	internal class JbstDeclarationBlock : JbstCodeBlock
-	{
-		#region Constants
-
-		private const string DeclarationFormat =
-@"// initialize template in the context of ""this""
-(function() {{
-	{1}
-}}).call({0});";
-
-		#endregion Constants
-
-		#region Fields
-
-		private readonly StringBuilder Content = new StringBuilder();
-		private string ownerName;
-
-		#endregion Fields
-
-		#region Init
-
-		/// <summary>
-		/// Ctor
-		/// </summary>
-		/// <param name="code"></param>
-		public JbstDeclarationBlock()
-			: base(String.Empty)
-		{
-		}
-
-		#endregion Init
-
-		#region Properties
-
-		/// <summary>
-		/// Gets the declaration code block content
-		/// </summary>
-		public override string Code
-		{
-			get { return this.Content.ToString(); }
-		}
-
-		/// <summary>
-		/// Gets an indication if any code has been appended
-		/// </summary>
-		public bool HasCode
-		{
-			get { return this.Content.Length > 0; }
-		}
-
-		/// <summary>
-		/// Gets the name of the owning JBST
-		/// </summary>
-		public string OwnerName
-		{
-			get
-			{
-				if (String.IsNullOrEmpty(this.ownerName))
-				{
-					return "this";
-				}
-				return this.ownerName;
-			}
-			set { this.ownerName = value; }
-		}
-
-		#endregion Properties
-
-		#region JbstCodeBlock Members
-
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
-		{
-			string code = this.Code.Trim();
-			if (!String.IsNullOrEmpty(code))
-			{
-				// render any declarations
-				writer.Write(JbstDeclarationBlock.DeclarationFormat, this.OwnerName, code);
-			}
-		}
-
-		#endregion JbstCodeBlock Members
-
-		#region Methods
-
-		/// <summary>
-		/// Append another code block onto declaration block
-		/// </summary>
-		/// <param name="control"></param>
-		public void Append(JbstCodeBlock block)
-		{
-			this.Content.Append(block.Code);
-		}
-
-		/// <summary>
-		/// Append another code block onto declaration block
-		/// </summary>
-		/// <param name="control"></param>
-		public void Append(string code)
-		{
-			this.Content.Append(code);
-		}
-
-		#endregion Methods
-	}
-
+	/// <summary>
+	/// Code expression which is evaluated and emitted into the resulting content
+	/// </summary>
 	internal class JbstExpressionBlock : JbstCodeBlock
 	{
 		#region Constants
@@ -270,7 +278,7 @@ namespace JsonFx.Jbst
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
 			{
-				writer.Write(JbstCodeBlock.Noop);
+				base.Format(formatter, writer);
 			}
 			else
 			{
@@ -282,48 +290,12 @@ namespace JsonFx.Jbst
 		#endregion JbstCodeBlock Members
 	}
 
-	internal class JbstUnparsedBlock : JbstCodeBlock
-	{
-		#region Constants
-
-		private const string UnparsedFormat =
-@"function() {{
-	return JsonML.raw({0});
-}}";
-
-		#endregion Constants
-
-		#region Init
-
-		/// <summary>
-		/// Ctor
-		/// </summary>
-		/// <param name="code"></param>
-		public JbstUnparsedBlock(string code)
-			: base(code)
-		{
-		}
-
-		#endregion Init
-
-		#region JbstCodeBlock Members
-
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
-		{
-			string code = this.Code;
-			if (String.IsNullOrEmpty(code))
-			{
-				writer.Write(JbstCodeBlock.Noop);
-			}
-			else
-			{
-				writer.Write(UnparsedFormat, code);
-			}
-		}
-
-		#endregion JbstCodeBlock Members
-	}
-
+	/// <summary>
+	/// Bind-time code which may or may not emit resulting content
+	/// </summary>
+	/// <remarks>
+	/// The return value is the
+	/// </remarks>
 	internal class JbstStatementBlock : JbstCodeBlock
 	{
 		#region Constants
@@ -356,7 +328,7 @@ namespace JsonFx.Jbst
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
 			{
-				writer.Write(JbstCodeBlock.Noop);
+				base.Format(formatter, writer);
 			}
 			else
 			{
@@ -395,15 +367,15 @@ namespace JsonFx.Jbst
 		{
 			KeyValuePair<string, string> expr = JbstExtensionBlock.ParseExpression(code);
 
-			// TODO: expose ability to add extension evaluators
-			switch (expr.Key)
+			// TODO: expose ability to extend evaluators
+			switch ((expr.Key??"").ToLowerInvariant())
 			{
-				case "AppSettings":
+				case "appsettings":
 				{
 					this.extension = new AppSettingsJbstExtension(expr.Value, path);
 					break;
 				}
-				case "Resources":
+				case "resources":
 				{
 					this.extension = new ResourceJbstExtension(expr.Value, path);
 					break;
@@ -435,7 +407,7 @@ namespace JsonFx.Jbst
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			// execute the corresponding extension evaluator
-			this.Extension.WriteCodeBlock(formatter, writer);
+			this.Extension.Format(formatter, writer);
 		}
 
 		#endregion JbstCodeBlock Members
@@ -463,5 +435,50 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Utility Methods
+	}
+
+	/// <summary>
+	/// Raw content
+	/// </summary>
+	internal class JbstUnparsedBlock : JbstCodeBlock
+	{
+		#region Constants
+
+		private const string UnparsedFormat =
+@"function() {{
+	return JsonML.raw({0});
+}}";
+
+		#endregion Constants
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="code"></param>
+		public JbstUnparsedBlock(string code)
+			: base(code)
+		{
+		}
+
+		#endregion Init
+
+		#region JbstCodeBlock Members
+
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		{
+			string code = this.Code;
+			if (String.IsNullOrEmpty(code))
+			{
+				base.Format(formatter, writer);
+			}
+			else
+			{
+				writer.Write(UnparsedFormat, code);
+			}
+		}
+
+		#endregion JbstCodeBlock Members
 	}
 }

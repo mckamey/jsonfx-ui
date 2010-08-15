@@ -38,7 +38,7 @@ using JsonFx.Utils;
 
 namespace JsonFx.Jbst.Extensions
 {
-	public class ResourceJbstExtension : JbstExtension
+	internal class ResourceJbstExtension : JbstExtension
 	{
 		#region Constants
 
@@ -95,11 +95,11 @@ namespace JsonFx.Jbst.Extensions
 
 		#region JbstExtension Members
 
-		protected internal override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			if (this.ResKey == null)
 			{
-				writer.Write(JbstCodeBlock.Noop);
+				base.Format(formatter, writer);
 				return;
 			}
 

@@ -38,17 +38,10 @@ using JsonFx.Utils;
 namespace JsonFx.Jbst.Extensions
 {
 	/// <summary>
-	/// Base class for extending JBST with custom declarations
+	/// Base class for extending JBST with custom expressions
 	/// </summary>
-	public class JbstExtension
+	internal class JbstExtension : JbstCommand
 	{
-		#region Constants
-
-		private const string PrefixNotFoundError =
-			@"alert(""Error in {0}:\nUnknown extension \""{1}\"""")";
-
-		#endregion Constants
-
 		#region Fields
 
 		private readonly string value;
@@ -65,8 +58,8 @@ namespace JsonFx.Jbst.Extensions
 		/// <param name="virtualPath"></param>
 		protected internal JbstExtension(string value, string path)
 		{
-			this.value = value;
-			this.path = path;
+			this.value = value ?? String.Empty;
+			this.path = path ?? String.Empty;
 		}
 
 		#endregion Init
@@ -90,17 +83,5 @@ namespace JsonFx.Jbst.Extensions
 		}
 
 		#endregion Properties
-
-		#region JbstExtension Members
-
-		protected internal virtual void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
-		{
-			// output error
-			string path = PathUtility.EnsureAppRelative(this.Path);
-
-			writer.Write(JbstExtension.PrefixNotFoundError, path, this.Value);
-		}
-
-		#endregion JbstExtension Members
 	}
 }

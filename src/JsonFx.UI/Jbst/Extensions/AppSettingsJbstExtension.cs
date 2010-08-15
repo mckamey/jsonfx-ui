@@ -37,7 +37,7 @@ using JsonFx.Serialization;
 
 namespace JsonFx.Jbst.Extensions
 {
-	public class AppSettingsJbstExtension : JbstExtension
+	internal class AppSettingsJbstExtension : JbstExtension
 	{
 		#region Init
 
@@ -55,9 +55,17 @@ namespace JsonFx.Jbst.Extensions
 
 		#region JbstExtension Members
 
-		protected internal override void WriteCodeBlock(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, ConfigurationManager.AppSettings[this.Value]) });
+			string appSettingsKey = this.Value.Trim();
+
+			if (String.IsNullOrEmpty(appSettingsKey))
+			{
+				base.Format(formatter, writer);
+				return;
+			}
+
+			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
 		}
 
 		#endregion JbstExtension Members

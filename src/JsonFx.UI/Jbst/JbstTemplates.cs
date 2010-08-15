@@ -37,31 +37,13 @@ using JsonFx.Serialization;
 namespace JsonFx.Jbst
 {
 	/// <summary>
-	/// Internal representation of JBST commands
-	/// </summary>
-	internal abstract class JbstCommand : ITextFormattable<CommonTokenType>
-	{
-		#region Constants
-
-		public const string JbstPrefix = "jbst";
-
-		#endregion Constants
-
-		#region ITextFormattable<CommonTokenType> Members
-
-		public abstract void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer);
-
-		#endregion ITextFormattable<CommonTokenType> Members
-	}
-
-	/// <summary>
 	/// Internal representation of template/control commands
 	/// </summary>
-	internal abstract class JbstTemplateCommand : JbstCommand
+	internal abstract class JbstTemplate : JbstCommand
 	{
 		#region Constants
 
-		public static readonly DataName CommandName = new DataName("control", JbstCommand.JbstPrefix, null);
+		public static readonly DataName CommandName = new DataName("control", JbstCommand.Prefix, null);
 
 		public const string KeyName = "name";	// id
 		public const string KeyData = "data";	// model
@@ -95,19 +77,19 @@ namespace JsonFx.Jbst
 
 		public object DataExpr
 		{
-			get { return (this.dataExpr ?? JbstTemplateCommand.DefaultDataExpression); }
+			get { return (this.dataExpr ?? JbstTemplate.DefaultDataExpression); }
 			set { this.dataExpr = value; }
 		}
 
 		public object IndexExpr
 		{
-			get { return (this.indexExpr ?? JbstTemplateCommand.DefaultIndexExpression); }
+			get { return (this.indexExpr ?? JbstTemplate.DefaultIndexExpression); }
 			set { this.indexExpr = value; }
 		}
 
 		public object CountExpr
 		{
-			get { return (this.countExpr ?? JbstTemplateCommand.DefaultCountExpression); }
+			get { return (this.countExpr ?? JbstTemplate.DefaultCountExpression); }
 			set { this.countExpr = value; }
 		}
 
@@ -129,15 +111,15 @@ namespace JsonFx.Jbst
 				return ((JbstExpressionBlock)argument).Code.Trim();
 			}
 
-			if (argument is JbstCodeBlock)
+			if (argument is JbstCommand)
 			{
 				using (StringWriter writer = new StringWriter())
 				{
 					// render code block as function
-					((ITextFormattable<CommonTokenType>)argument).Format(formatter, writer);
+					((JbstCommand)argument).Format(formatter, writer);
 
 					// convert to anonymous function call expression
-					return String.Format(JbstTemplateCommand.FunctionEvalExpression, writer.GetStringBuilder().ToString().Trim());
+					return String.Format(JbstTemplate.FunctionEvalExpression, writer.GetStringBuilder().ToString().Trim());
 				}
 			}
 
@@ -151,7 +133,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of a reference to a named template
 	/// </summary>
-	internal class JbstTemplateReference : JbstTemplateCommand
+	internal class JbstTemplateReference : JbstTemplate
 	{
 		#region Constants
 
@@ -180,7 +162,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of an anonymous inline template
 	/// </summary>
-	internal class JbstInlineTemplate : JbstTemplateCommand
+	internal class JbstInlineTemplate : JbstTemplate
 	{
 		#region Constants
 
@@ -219,11 +201,7 @@ namespace JsonFx.Jbst
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			if (!this.isEnd)
-			{
-				writer.Write(JbstInlineTemplate.InlineTemplateStart);
-			}
-			else
+			if (this.isEnd)
 			{
 				writer.Write(
 					JbstInlineTemplate.InlineTemplateEndFormat,
@@ -231,15 +209,19 @@ namespace JsonFx.Jbst
 					this.RenderExpression(formatter, this.IndexExpr),
 					this.RenderExpression(formatter, this.CountExpr));
 			}
+			else
+			{
+				writer.Write(JbstInlineTemplate.InlineTemplateStart);
+			}
 		}
 
 		#endregion JbstCommand Members
 	}
 
 	/// <summary>
-	/// Internal representation of a wrapper control containing named inner-templates
+	/// Internal representation of a wrapper control containing named or anonymous inner-templates
 	/// </summary>
-	internal class JbstWrapperTemplate : JbstTemplateCommand
+	internal class JbstWrapperTemplate : JbstTemplate
 	{
 		#region Constants
 
@@ -253,22 +235,43 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region Init
+		#region Fields
+
+		private bool isEnd;
+
+		#endregion Fields
+
+		#region Methods
 
 		/// <summary>
-		/// Ctor
+		/// Gets the matching end token
 		/// </summary>
-		public JbstWrapperTemplate()
+		/// <returns></returns>
+		public JbstWrapperTemplate GetInlineEnd()
 		{
+			var end = (JbstWrapperTemplate)this.MemberwiseClone();
+			end.isEnd = true;
+			return end;
 		}
 
-		#endregion Init
+		#endregion Methods
 
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			// TODO.
+			if (this.isEnd)
+			{
+				writer.Write(JbstWrapperTemplate.WrapperEnd);
+			}
+			else
+			{
+				writer.Write(JbstWrapperTemplate.WrapperStartFormat,
+					this.RenderExpression(formatter, this.NameExpr),
+					this.RenderExpression(formatter, this.DataExpr),
+					this.RenderExpression(formatter, this.IndexExpr),
+					this.RenderExpression(formatter, this.CountExpr));
+			}
 		}
 
 		#endregion JbstCommand Members
@@ -277,7 +280,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of a placeholder control
 	/// </summary>
-	internal class JbstPlaceholder : JbstTemplateCommand
+	internal class JbstPlaceholder : JbstTemplate
 	{
 		#region Constants
 

@@ -185,7 +185,7 @@ namespace JsonFx.Jbst
 					case MarkupTokenType.ElementBegin:
 					case MarkupTokenType.ElementVoid:
 					{
-						if (StringComparer.OrdinalIgnoreCase.Equals(token.Name.Prefix, JbstCommand.JbstPrefix))
+						if (StringComparer.OrdinalIgnoreCase.Equals(token.Name.Prefix, JbstCommand.Prefix))
 						{
 							if (depth == 0)
 							{
@@ -193,7 +193,7 @@ namespace JsonFx.Jbst
 							}
 
 							// process declarative template markup
-							this.ProcessJbstCommand(state, stream, output);
+							this.ProcessCommand(state, stream, output);
 						}
 						else if (token.Name == JbstCompiler.ScriptName)
 						{
@@ -278,12 +278,12 @@ namespace JsonFx.Jbst
 			return output;
 		}
 
-		private void ProcessJbstCommand(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
+		private void ProcessCommand(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
 		{
 			var token = stream.Pop();
 			DataName commandName = token.Name;
 			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
-			if (commandName == JbstTemplateCommand.CommandName)
+			if (commandName == JbstTemplate.CommandName)
 			{
 				// new inner state for nested control
 				state = new CompilationState(state.Path);
@@ -325,30 +325,52 @@ namespace JsonFx.Jbst
 				}
 			}
 
-			if (commandName == JbstTemplateCommand.CommandName)
+			if (commandName == JbstTemplate.CommandName)
 			{
 				object name, data, index, count;
 
-				attributes.TryGetValue(JbstTemplateCommand.KeyName, out name);
-				attributes.TryGetValue(JbstTemplateCommand.KeyData, out data);
-				attributes.TryGetValue(JbstTemplateCommand.KeyIndex, out index);
-				attributes.TryGetValue(JbstTemplateCommand.KeyCount, out count);
+				attributes.TryGetValue(JbstTemplate.KeyName, out name);
+				attributes.TryGetValue(JbstTemplate.KeyData, out data);
+				attributes.TryGetValue(JbstTemplate.KeyIndex, out index);
+				attributes.TryGetValue(JbstTemplate.KeyCount, out count);
 
-				if (isVoid && name != null)
+				var inner = isVoid ? null : this.ProcessTemplate(state, stream);
+
+				if (inner != null)
 				{
-					var command = new JbstTemplateReference
-						{
-							NameExpr = name,
-							DataExpr = data,
-							IndexExpr = index,
-							CountExpr = count
-						};
-
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+					if (stream.IsCompleted)
+					{
+						throw new TokenException<MarkupTokenType>(token, "Unexpected end of stream while processing JBST command");
+					}
+					token = stream.Pop();
+					if (token.TokenType != MarkupTokenType.ElementEnd)
+					{
+						throw new TokenException<MarkupTokenType>(token, "Unexpected token while processing JBST command");
+					}
 				}
-				else
+
+				if (name == null)
 				{
+					// anonymous inline template
 					var command = new JbstInlineTemplate
+					{
+						DataExpr = data,
+						IndexExpr = index,
+						CountExpr = count
+					};
+
+					// TODO: cannot emit as a token or will add delimiters
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+
+					output.AddRange(inner);
+
+					// TODO: cannot emit as a token or will add delimiters
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command.GetInlineEnd()));
+				}
+				else if (inner == null || inner.Count < 1)
+				{
+					// simple template reference
+					var command = new JbstTemplateReference
 					{
 						NameExpr = name,
 						DataExpr = data,
@@ -357,10 +379,24 @@ namespace JsonFx.Jbst
 					};
 
 					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+				}
+				else
+				{
+					// wrapper control containing named or anonymous inner-templates
+					var command = new JbstWrapperTemplate
+					{
+						NameExpr = name,
+						DataExpr = data,
+						IndexExpr = index,
+						CountExpr = count
+					};
 
-					var inner = this.ProcessTemplate(state, stream);
+					// TODO: cannot emit as a token or will add delimiters
+					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
+
 					output.AddRange(inner);
 
+					// TODO: cannot emit as a token or will add delimiters
 					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command.GetInlineEnd()));
 				}
 			}
