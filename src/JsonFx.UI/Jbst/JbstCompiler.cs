@@ -31,7 +31,6 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.RegularExpressions;
 
 using JsonFx.EcmaScript;
 using JsonFx.Html;
@@ -302,10 +301,11 @@ namespace JsonFx.Jbst
 				}
 			}
 
+			CompilationState innerState = null;
 			if (!isVoid)
 			{
 				// new state created for inner context
-				state = this.ProcessTemplate(state.FilePath, stream);
+				innerState = this.ProcessTemplate(state.FilePath, stream);
 
 				// consume closing command tag
 				if (stream.IsCompleted)
@@ -327,51 +327,61 @@ namespace JsonFx.Jbst
 			attributes.TryGetValue(JbstTemplateCall.KeyCount, out count);
 
 			JbstTemplateCall command = null;
-			if (StringComparer.OrdinalIgnoreCase.Equals(commandName, JbstTemplateCall.CommandName))
+			switch ((commandName??"").ToLowerInvariant())
 			{
-				if (name == null)
+				case JbstTemplateCall.ControlCommand:
 				{
-					// anonymous inline template
-					command = new JbstInlineTemplate(state)
+					if (name == null)
 					{
-						DataExpr = data,
-						IndexExpr = index,
-						CountExpr = count
-					};
-				}
-				else if (state.Content == null)
-				{
-					// simple template reference
-					command = new JbstTemplateReference(state)
+						// anonymous inline template
+						command = new JbstInlineTemplate(innerState)
+						{
+							DataExpr = data,
+							IndexExpr = index,
+							CountExpr = count
+						};
+					}
+					else if (innerState == null || innerState.Content == null)
 					{
-						NameExpr = name,
-						DataExpr = data,
-						IndexExpr = index,
-						CountExpr = count
-					};
+						// simple template reference
+						command = new JbstTemplateReference(innerState)
+						{
+							NameExpr = name,
+							DataExpr = data,
+							IndexExpr = index,
+							CountExpr = count
+						};
+					}
+					else
+					{
+						// wrapper control containing named or anonymous inner-templates
+						command = new JbstWrapperTemplate(innerState)
+						{
+							NameExpr = name,
+							DataExpr = data,
+							IndexExpr = index,
+							CountExpr = count
+						};
+					}
+					break;
 				}
-				else
+				case JbstPlaceholder.PlaceholderCommand:
 				{
 					// wrapper control containing named or anonymous inner-templates
-					command = new JbstWrapperTemplate(state)
+					command = new JbstPlaceholder()
 					{
 						NameExpr = name,
 						DataExpr = data,
 						IndexExpr = index,
 						CountExpr = count
 					};
+					break;
 				}
-			}
-			else if (StringComparer.OrdinalIgnoreCase.Equals(commandName, JbstPlaceholder.CommandName))
-			{
-				// wrapper control containing named or anonymous inner-templates
-				command = new JbstPlaceholder()
+				case JbstWrapperTemplate.InlineCommand:
 				{
-					NameExpr = name,
-					DataExpr = data,
-					IndexExpr = index,
-					CountExpr = count
-				};
+					state[(name as String) ?? String.Empty] = innerState.Content;
+					break;
+				}
 			}
 
 			if (command != null)

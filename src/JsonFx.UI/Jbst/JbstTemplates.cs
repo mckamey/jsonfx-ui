@@ -43,7 +43,7 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
-		public static readonly string CommandName = JbstCommand.Prefix+":control";
+		public const string ControlCommand = JbstCommand.Prefix+":control";
 
 		public const string KeyName = "name";	// id
 		public const string KeyData = "data";	// model
@@ -249,6 +249,8 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
+		public const string InlineCommand = JbstCommand.Prefix+":inline";
+
 		private const string WrapperStartFormat =
 @"function() {{
 	return JsonML.BST({0}).dataBind({1}, {2}, {3}, ";
@@ -282,8 +284,12 @@ namespace JsonFx.Jbst
 				FormatExpression(formatter, this.IndexExpr),
 				FormatExpression(formatter, this.CountExpr));
 
-			// TODO: emit template object here
-			writer.Write("{}");
+			if (this.State.Content != null)
+			{
+				this.State[String.Empty] = this.State.Content;
+			}
+
+			formatter.Format(this.State.GetNamedTemplates(), writer);
 
 			writer.Write(JbstWrapperTemplate.WrapperEnd);
 		}
@@ -298,7 +304,7 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
-		public static readonly new string CommandName = JbstCommand.Prefix+":placeholder";
+		public const string PlaceholderCommand = JbstCommand.Prefix+":placeholder";
 
 		public const string InlinePrefix = "$";
 

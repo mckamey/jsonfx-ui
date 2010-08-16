@@ -352,29 +352,27 @@ var NestedControls = JsonML.BST([
 	"" "",
 	function() {
 	return JsonML.BST(Example.myWrapperControl).dataBind(this.data, this.index, this.count, {
-		$: 
-			[
-				"""",
-				"" "",
-				""""/* this content is inserted inside the other JBST control */,
-				"" "",
-				[
-					""a"",
-					{
-						href: 
-							function() {
+	$ : [
+		"""",
+		""""/* this content is inserted inside the other JBST control */,
+		"" "",
+		[
+			""a"",
+			{
+				href : function() {
 	return this.data.linkUrl;
 }
-					},
-					function() {
+			},
+			function() {
 	return this.data.linkLabel;
 }
-				],
-				"" ""
-			]
-	});
-			}
-]);";
+		],
+		"" ""
+	]
+});
+}
+]);
+";
 
 			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
 

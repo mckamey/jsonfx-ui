@@ -57,6 +57,7 @@ namespace JsonFx.Jbst
 		private string jbstName;
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
+		private IDictionary<string, IEnumerable<Token<CommonTokenType>>> namedTemplates;
 
 		#endregion Fields
 
@@ -118,6 +119,27 @@ namespace JsonFx.Jbst
 			set;
 		}
 
+		public IEnumerable<Token<CommonTokenType>> this[string name]
+		{
+			get
+			{
+				if (this.namedTemplates == null)
+				{
+					return null;
+				}
+
+				return this.namedTemplates[name];
+			}
+			set
+			{
+				if (this.namedTemplates == null)
+				{
+					this.namedTemplates = new Dictionary<string, IEnumerable<Token<CommonTokenType>>>(StringComparer.OrdinalIgnoreCase);
+				}
+				this.namedTemplates[name] = value;
+			}
+		}
+
 		public AutoMarkupType AutoMarkup
 		{
 			get;
@@ -164,6 +186,33 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion JbstCommand Members
+
+		#region Methods
+
+		public IEnumerable<Token<CommonTokenType>> GetNamedTemplates()
+		{
+			yield return new Token<CommonTokenType>(CommonTokenType.ObjectBegin);
+
+			if (this.namedTemplates != null)
+			{
+				foreach (var template in this.namedTemplates)
+				{
+					yield return new Token<CommonTokenType>(CommonTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix+template.Key));
+
+					if (template.Value != null)
+					{
+						foreach (var token in template.Value)
+						{
+							yield return token;
+						}
+					}
+				}
+			}
+
+			yield return new Token<CommonTokenType>(CommonTokenType.ObjectEnd);
+		}
+
+		#endregion Methods
 
 		#region Utility Methods
 
