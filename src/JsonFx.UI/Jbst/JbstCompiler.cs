@@ -263,41 +263,84 @@ namespace JsonFx.Jbst
 			string commandName = token.Name.ToPrefixedName();
 			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
 
-			IDictionary<string, object> attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+			object	name = null,
+					data = null,
+					index = null,
+					count = null;
+
 			while (!stream.IsCompleted)
 			{
-				token = stream.Pop();
+				token = stream.Peek();
 				if (token.TokenType != MarkupTokenType.Attribute)
 				{
 					break;
 				}
+				stream.Pop();
 				if (stream.IsCompleted)
 				{
 					throw new TokenException<MarkupTokenType>(token, "Unexpected end of stream while processing JBST command");
 				}
 
-				string attrName = token.Name.LocalName;
+				DataName attrName = token.Name;
+				if (!String.IsNullOrEmpty(attrName.Prefix) && !StringComparer.OrdinalIgnoreCase.Equals(attrName.Prefix, JbstCommand.Prefix))
+				{
+					throw new TokenException<MarkupTokenType>(token, String.Format("Unsupported JBST command arg ({0})", attrName));
+				}
+
 				token = stream.Pop();
 				if (token.TokenType != MarkupTokenType.Primitive)
 				{
 					throw new TokenException<MarkupTokenType>(token, "Unexpected value for JBST command arg: "+token.TokenType);
 				}
 
+				object attrValue = null;
 				var block = token.Value as UnparsedBlock;
 				if (block != null)
 				{
-					// NOTE: currently these are being processed in the context of the parent
-
 					// interpret an unparsed block
 					Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
 					if (codeBlock != null && codeBlock.Value != null)
 					{
-						attributes[attrName] = codeBlock.Value;
+						attrValue = codeBlock.Value;
 					}
 				}
 				else
 				{
-					attributes[attrName] = token.Value;
+					attrValue = token.Value;
+				}
+
+				switch (attrName.LocalName.ToLowerInvariant())
+				{
+					case JbstTemplateCall.ArgName:
+					{
+						name = attrValue;
+						break;
+					}
+					case JbstTemplateCall.ArgData:
+					{
+						data = attrValue;
+						break;
+					}
+					case JbstTemplateCall.ArgIndex:
+					{
+						index = attrValue;
+						break;
+					}
+					case JbstTemplateCall.ArgCount:
+					{
+						count = attrValue;
+						break;
+					}
+					case JbstTemplateCall.ArgVisible:
+					case JbstTemplateCall.ArgOnInit:
+					case JbstTemplateCall.ArgOnLoad:
+					//{
+					//    break;
+					//}
+					default:
+					{
+						throw new TokenException<MarkupTokenType>(token, String.Format("Unsupported JBST command arg ({0})", attrName));
+					}
 				}
 			}
 
@@ -318,13 +361,6 @@ namespace JsonFx.Jbst
 					throw new TokenException<MarkupTokenType>(token, "Unexpected token while processing JBST command");
 				}
 			}
-
-			object name, data, index, count;
-
-			attributes.TryGetValue(JbstTemplateCall.KeyName, out name);
-			attributes.TryGetValue(JbstTemplateCall.KeyData, out data);
-			attributes.TryGetValue(JbstTemplateCall.KeyIndex, out index);
-			attributes.TryGetValue(JbstTemplateCall.KeyCount, out count);
 
 			JbstTemplateCall command = null;
 			switch ((commandName??"").ToLowerInvariant())

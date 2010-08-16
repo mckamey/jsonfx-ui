@@ -32,6 +32,8 @@ using System;
 using System.IO;
 using System.Text;
 
+using JsonFx.Markup;
+using JsonFx.Serialization;
 using Xunit;
 
 using Assert=JsonFx.AssertPatched;
@@ -148,6 +150,7 @@ Foo.MyZebraList = JsonML.BST([
 		function() {
 	return JsonML.BST([
 	"""",
+	"" "",
 	""""/* populate list item for each item of the parent's children property */,
 	"" "",
 	[
@@ -340,7 +343,8 @@ var NestedControls = JsonML.BST([
 		"" "",
 		function() {
 	return JsonML.BST(Example.myOtherJBST).dataBind(this.data.childList, this.index, this.count);
-}
+},
+		"" ""
 	],
 	"" "",
 	""""/* declaratively embedding a simple child control which uses the same data as the parent */,
@@ -348,12 +352,14 @@ var NestedControls = JsonML.BST([
 	function() {
 	return JsonML.BST(Example.myBasicControl).dataBind(this.data, this.index, this.count);
 },
+	"" "",
 	""""/* declaratively embedding a child control that is a wrapper */,
 	"" "",
 	function() {
 	return JsonML.BST(Example.myWrapperControl).dataBind(this.data, this.index, this.count, {
 	$ : [
 		"""",
+		"" "",
 		""""/* this content is inserted inside the other JBST control */,
 		"" "",
 		[
@@ -424,7 +430,8 @@ var WrapperControl = JsonML.BST([
 	if (parts && parts[inline]) {
 		return JsonML.BST(parts[inline]).dataBind(this.data, this.index, this.count, parts);
 	}
-}
+},
+			"" ""
 		],
 		"" ""
 	]
@@ -498,6 +505,42 @@ var SwitcherControl = JsonML.BST([
 			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
 
 			Assert.Equal(expected, actual);
+		}
+
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_UnsupportedArgs_ThrowsTokenException()
+		{
+			var input =
+@"<%@ Control Name=""Foo.UnsupportedArgs"" Language=""JavaScript"" %>
+
+<!-- declaratively embedding a reference to the switcher value binding the list of children -->
+<jbst:control name=""Foo.anotherJbst"" data=""this.data.children"" foo=""bar"" />";
+
+			var ex = Assert.Throws<TokenException<MarkupTokenType>>(delegate()
+			{
+				var actual = new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input);
+			});
+
+			Assert.Equal(ex.Token, new Token<MarkupTokenType>(MarkupTokenType.Primitive, "bar"));
+		}
+
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_UnsupportedArgPrefix_ThrowsTokenException()
+		{
+			var input =
+@"<%@ Control Name=""Foo.UnsupportedArgPrefix"" Language=""JavaScript"" %>
+
+<!-- declaratively embedding a reference to the switcher value binding the list of children -->
+<jbst:control name=""Foo.anotherJbst"" foo:data=""this.data.children"" />";
+
+			var ex = Assert.Throws<TokenException<MarkupTokenType>>(delegate()
+			{
+				var actual = new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input);
+			});
+
+			Assert.Equal(ex.Token, new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("data", "foo", null)));
 		}
 
 		#endregion Foo Tests

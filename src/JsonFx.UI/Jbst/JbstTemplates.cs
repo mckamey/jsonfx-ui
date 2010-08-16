@@ -45,14 +45,18 @@ namespace JsonFx.Jbst
 
 		public const string ControlCommand = JbstCommand.Prefix+":control";
 
-		public const string KeyName = "name";	// id
-		public const string KeyData = "data";	// model
-		public const string KeyIndex = "index";	// skip
-		public const string KeyCount = "count";	// take
+		public const string ArgName = "name";	// id
+		public const string ArgData = "data";	// model
+		public const string ArgIndex = "index";	// current
+		public const string ArgCount = "count";	// length
 
-		private const string DefaultDataExpression = "this."+KeyData;
-		private const string DefaultIndexExpression = "this."+KeyIndex;
-		private const string DefaultCountExpression = "this."+KeyCount;
+		public const string ArgVisible = "visible";
+		public const string ArgOnInit = "oninit";
+		public const string ArgOnLoad = "onload";
+
+		private const string DefaultDataExpression = "this."+JbstTemplateCall.ArgData;
+		private const string DefaultIndexExpression = "this."+JbstTemplateCall.ArgIndex;
+		private const string DefaultCountExpression = "this."+JbstTemplateCall.ArgCount;
 
 		private const string FunctionEvalExpression = "({0}).call(this)";
 
@@ -284,12 +288,23 @@ namespace JsonFx.Jbst
 				FormatExpression(formatter, this.IndexExpr),
 				FormatExpression(formatter, this.CountExpr));
 
-			if (this.State.Content != null)
+			if (this.State == null)
 			{
-				this.State[String.Empty] = this.State.Content;
+				formatter.Format(new[]
+				{
+					new Token<CommonTokenType>(CommonTokenType.ObjectBegin),
+					new Token<CommonTokenType>(CommonTokenType.ObjectEnd)
+				}, writer);
 			}
+			else
+			{
+				if (this.State.Content != null)
+				{
+					this.State[String.Empty] = this.State.Content;
+				}
 
-			formatter.Format(this.State.GetNamedTemplates(), writer);
+				formatter.Format(this.State.GetNamedTemplates(), writer);
+			}
 
 			writer.Write(JbstWrapperTemplate.WrapperEnd);
 		}
