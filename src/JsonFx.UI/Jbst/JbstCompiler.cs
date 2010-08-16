@@ -50,8 +50,6 @@ namespace JsonFx.Jbst
 		#region Constants
 
 		private static readonly char[] ImportDelim = { ' ', ',' };
-		private const string Whitespace = " ";
-		private static readonly Regex RegexWhitespace = new Regex(@"\s+", RegexOptions.Compiled|RegexOptions.CultureInvariant);
 		private static readonly DataName FragmentName = new DataName(String.Empty);
 		private static readonly DataName ScriptName = new DataName("script");
 
@@ -207,12 +205,13 @@ namespace JsonFx.Jbst
 								output.Add(codeBlock);
 							}
 						}
-						else
+						else if (token.Value != null)
 						{
-							if (this.ProcessLiteralText(output, token) && (depth == 0))
+							if ((depth == 0) && (!(token.Value is string) || !IsNullOrWhiteSpace(token.ValueAsString())))
 							{
 								rootCount++;
 							}
+							output.Add(token);
 						}
 						continue;
 					}
@@ -249,7 +248,7 @@ namespace JsonFx.Jbst
 
 			if (output.Count > 0)
 			{
-				state.Content = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(output);
+				state.Content = new JsonMLReader.JsonMLInTransformer { Whitespace = WhitespaceType.Normalize }.Transform(output);
 			}
 			else
 			{
@@ -621,7 +620,7 @@ namespace JsonFx.Jbst
 			{
 				var root = (last >= 0) ? (result[trailing ? last : 0]) : null;
 				if (root.TokenType != MarkupTokenType.Primitive ||
-					!StringComparer.Ordinal.Equals(JbstCompiler.Whitespace, root.Value))
+					!IsNullOrWhiteSpace(root.ValueAsString()))
 				{
 					if (trailing)
 					{
@@ -641,53 +640,48 @@ namespace JsonFx.Jbst
 			// should be a single root or empty list
 		}
 
-		/// <summary>
-		/// Normalized literal text whitespace since HTML will do this anyway
-		/// </summary>
-		/// <param name="token">value will be normalized or token will be set to null if empty text</param>
-		/// <returns>if resulted in non-whitespace text</returns>
-		private bool ProcessLiteralText(List<Token<MarkupTokenType>> output, Token<MarkupTokenType> token)
-		{
-			string normalized;
-			if (this.NormalizeWhitespace(token.ValueAsString(), out normalized))
-			{
-				// extraneous whitespace was normalized
-				token = new Token<MarkupTokenType>(MarkupTokenType.Primitive, token.Name, normalized);
-			}
-
-			if (String.IsNullOrEmpty(normalized))
-			{
-				// prune empty text nodes
-				return false;
-			}
-
-			// text which does not need normalization passes through unaffected
-			output.Add(token);
-
-			// was non-whitespace text node
-			return !StringComparer.Ordinal.Equals(normalized, JbstCompiler.Whitespace);
-		}
-
-		/// <summary>
-		/// Replaces string of whitespace with a single space
-		/// </summary>
-		/// <param name="text"></param>
-		/// <param name="normalized"></param>
-		/// <returns></returns>
-		private bool NormalizeWhitespace(string text, out string normalized)
-		{
-			if (String.IsNullOrEmpty(text))
-			{
-				normalized = String.Empty;
-				return false;
-			}
-
-			// replace whitespace chunks with single space (HTML-style normalization)
-			normalized = JbstCompiler.RegexWhitespace.Replace(text, JbstCompiler.Whitespace);
-
-			return !StringComparer.Ordinal.Equals(normalized, text);
-		}
-
 		#endregion Processing Methods
+
+		#region Utility Methods
+
+		/// <summary>
+		/// Checks if string is null, empty or entirely made up of whitespace
+		/// </summary>
+		/// <param name="value"></param>
+		/// <returns></returns>
+		/// <remarks>
+		/// Essentially the same as String.IsNullOrWhiteSpace from .NET 4.0
+		/// with a simpler view of whitespace.
+		/// </remarks>
+		private static bool IsNullOrWhiteSpace(string value)
+		{
+			if (value != null)
+			{
+				for (int i=0, length=value.Length; i<length; i++)
+				{
+					if (!IsWhiteSpace(value[i]))
+					{
+						return false;
+					}
+				}
+			}
+			return true;
+		}
+
+		/// <summary>
+		/// Checks if character is line ending, tab or space
+		/// </summary>
+		/// <param name="ch"></param>
+		/// <returns></returns>
+		private static bool IsWhiteSpace(char ch)
+		{
+			return
+				(ch == ' ') |
+				(ch == '\n') ||
+				(ch == '\r') ||
+				(ch == '\t');
+		}
+
+		#endregion Utility Methods
 	}
 }
