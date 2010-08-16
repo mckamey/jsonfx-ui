@@ -33,8 +33,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 
-using JsonFx.Common;
 using JsonFx.Jbst.Extensions;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
@@ -42,7 +42,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of JBST commands
 	/// </summary>
-	internal abstract class JbstCommand : ITextFormattable<CommonTokenType>
+	internal abstract class JbstCommand : ITextFormattable<ModelTokenType>
 	{
 		#region Constants
 
@@ -51,15 +51,15 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region ITextFormattable<CommonTokenType> Members
+		#region ITextFormattable<ModelTokenType> Members
 
-		public virtual void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public virtual void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			// emit an innocuous value
 			writer.Write(JbstCommand.Noop);
 		}
 
-		#endregion ITextFormattable<CommonTokenType> Members
+		#endregion ITextFormattable<ModelTokenType> Members
 	}
 
 	/// <summary>
@@ -118,7 +118,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string content = this.Content.ToString().Trim();
 			if (String.IsNullOrEmpty(content))
@@ -184,9 +184,9 @@ namespace JsonFx.Jbst
 
 		#endregion Properties
 
-		#region ITextFormattable<CommonTokenType> Members
+		#region ITextFormattable<ModelTokenType> Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			if (String.IsNullOrEmpty(this.code))
 			{
@@ -198,7 +198,7 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		#endregion ITextFormattable<CommonTokenType> Members
+		#endregion ITextFormattable<ModelTokenType> Members
 	}
 
 	/// <summary>
@@ -228,7 +228,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -273,7 +273,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -323,7 +323,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code.Trim();
 			if (String.IsNullOrEmpty(code))
@@ -404,7 +404,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			// execute the corresponding extension evaluator
 			this.Extension.Format(formatter, writer);
@@ -466,7 +466,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCodeBlock Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string code = this.Code;
 			if (String.IsNullOrEmpty(code))

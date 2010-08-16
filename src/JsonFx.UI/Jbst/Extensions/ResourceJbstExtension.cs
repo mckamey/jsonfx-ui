@@ -32,7 +32,7 @@ using System;
 using System.IO;
 using System.Web.Compilation;
 
-using JsonFx.Common;
+using JsonFx.Model;
 using JsonFx.Serialization;
 using JsonFx.Utils;
 
@@ -95,7 +95,7 @@ namespace JsonFx.Jbst.Extensions
 
 		#region JbstExtension Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			if (this.ResKey == null)
 			{
@@ -106,7 +106,7 @@ namespace JsonFx.Jbst.Extensions
 			writer.Write(ResourceLookupBegin);
 
 			// serialize the key to the writer
-			formatter.Format(new [] { new Token<CommonTokenType>(CommonTokenType.Primitive, this.GlobalizationKey) }, writer);
+			formatter.Format(new [] { new Token<ModelTokenType>(ModelTokenType.Primitive, this.GlobalizationKey) }, writer);
 
 			writer.Write(ResourceLookupEnd);
 		}

@@ -32,7 +32,7 @@ using System;
 using System.Configuration;
 using System.IO;
 
-using JsonFx.Common;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst.Extensions
@@ -55,7 +55,7 @@ namespace JsonFx.Jbst.Extensions
 
 		#region JbstExtension Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			string appSettingsKey = this.Value.Trim();
 
@@ -65,7 +65,7 @@ namespace JsonFx.Jbst.Extensions
 				return;
 			}
 
-			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
+			formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
 		}
 
 		#endregion JbstExtension Members

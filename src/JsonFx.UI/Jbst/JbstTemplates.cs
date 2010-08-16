@@ -31,7 +31,7 @@
 using System;
 using System.IO;
 
-using JsonFx.Common;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
@@ -115,7 +115,7 @@ namespace JsonFx.Jbst
 		
 		#region Utility Methods
 
-		public static string FormatExpression(ITextFormatter<CommonTokenType> formatter, object argument)
+		public static string FormatExpression(ITextFormatter<ModelTokenType> formatter, object argument)
 		{
 			if (argument is string)
 			{
@@ -142,7 +142,7 @@ namespace JsonFx.Jbst
 			}
 
 			// convert to token sequence and allow formatter to emit as primitive
-			return formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, argument) });
+			return formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, argument) });
 		}
 
 		#endregion Utility Methods
@@ -177,7 +177,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(
 				JbstTemplateReference.TemplateReferenceFormat,
@@ -222,7 +222,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(JbstInlineTemplate.InlineTemplateStart);
 
@@ -280,7 +280,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(JbstWrapperTemplate.WrapperStartFormat,
 				FormatExpression(formatter, this.NameExpr),
@@ -292,8 +292,8 @@ namespace JsonFx.Jbst
 			{
 				formatter.Format(new[]
 				{
-					new Token<CommonTokenType>(CommonTokenType.ObjectBegin),
-					new Token<CommonTokenType>(CommonTokenType.ObjectEnd)
+					new Token<ModelTokenType>(ModelTokenType.ObjectBegin),
+					new Token<ModelTokenType>(ModelTokenType.ObjectEnd)
 				}, writer);
 			}
 			else
@@ -353,12 +353,12 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(JbstPlaceholder.PlaceholderStatementStart);
 
 			// escape as a string literal
-			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, JbstPlaceholder.InlinePrefix+this.NameExpr) }, writer);
+			formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, JbstPlaceholder.InlinePrefix+this.NameExpr) }, writer);
 
 			writer.Write(
 				JbstPlaceholder.PlaceholderStatementEndFormat,

@@ -29,11 +29,6 @@
 #endregion License
 
 using System;
-using System.IO;
-
-using JsonFx.Common;
-using JsonFx.Serialization;
-using JsonFx.Utils;
 
 namespace JsonFx.Jbst.Extensions
 {

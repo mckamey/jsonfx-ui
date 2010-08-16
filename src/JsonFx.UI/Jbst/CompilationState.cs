@@ -33,8 +33,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 
-using JsonFx.Common;
 using JsonFx.EcmaScript;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
@@ -57,7 +57,7 @@ namespace JsonFx.Jbst
 		private string jbstName;
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
-		private IDictionary<string, IEnumerable<Token<CommonTokenType>>> namedTemplates;
+		private IDictionary<string, IEnumerable<Token<ModelTokenType>>> namedTemplates;
 
 		#endregion Fields
 
@@ -113,13 +113,13 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		public IEnumerable<Token<CommonTokenType>> Content
+		public IEnumerable<Token<ModelTokenType>> Content
 		{
 			get;
 			set;
 		}
 
-		public IEnumerable<Token<CommonTokenType>> this[string name]
+		public IEnumerable<Token<ModelTokenType>> this[string name]
 		{
 			get
 			{
@@ -134,7 +134,7 @@ namespace JsonFx.Jbst
 			{
 				if (this.namedTemplates == null)
 				{
-					this.namedTemplates = new Dictionary<string, IEnumerable<Token<CommonTokenType>>>(StringComparer.OrdinalIgnoreCase);
+					this.namedTemplates = new Dictionary<string, IEnumerable<Token<ModelTokenType>>>(StringComparer.OrdinalIgnoreCase);
 				}
 				this.namedTemplates[name] = value;
 			}
@@ -150,7 +150,7 @@ namespace JsonFx.Jbst
 
 		#region JbstCommand Members
 
-		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
 			this.FormatGlobals(writer);
 
@@ -189,15 +189,15 @@ namespace JsonFx.Jbst
 
 		#region Methods
 
-		public IEnumerable<Token<CommonTokenType>> GetNamedTemplates()
+		public IEnumerable<Token<ModelTokenType>> GetNamedTemplates()
 		{
-			yield return new Token<CommonTokenType>(CommonTokenType.ObjectBegin);
+			yield return new Token<ModelTokenType>(ModelTokenType.ObjectBegin);
 
 			if (this.namedTemplates != null)
 			{
 				foreach (var template in this.namedTemplates)
 				{
-					yield return new Token<CommonTokenType>(CommonTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix+template.Key));
+					yield return new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix+template.Key));
 
 					if (template.Value != null)
 					{
@@ -209,7 +209,7 @@ namespace JsonFx.Jbst
 				}
 			}
 
-			yield return new Token<CommonTokenType>(CommonTokenType.ObjectEnd);
+			yield return new Token<ModelTokenType>(ModelTokenType.ObjectEnd);
 		}
 
 		#endregion Methods
