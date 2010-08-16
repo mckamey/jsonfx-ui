@@ -30,17 +30,33 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.RegularExpressions;
+
+using JsonFx.Common;
+using JsonFx.EcmaScript;
+using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
 {
-	internal class CompilationState
+	/// <summary>
+	/// The result from compiling a template
+	/// </summary>
+	internal class CompilationState : JbstCommand
 	{
+		#region Constants
+
+		private static readonly Regex Regex_JbstName = new Regex("[^0-9a-zA-Z$_]+", RegexOptions.Compiled|RegexOptions.CultureInvariant|RegexOptions.ExplicitCapture);
+
+		#endregion Constants
+
 		#region Fields
 
+		public readonly string FilePath;
+
 		private string jbstName;
-		public readonly string Path;
-		public readonly List<string> Imports = new List<string>();
-		public readonly JbstDeclarationBlock DeclarationBlock = new JbstDeclarationBlock();
+		private List<string> imports;
+		private JbstDeclarationBlock declarationBlock;
 
 		#endregion Fields
 
@@ -49,15 +65,27 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Ctor
 		/// </summary>
-		/// <param name="path"></param>
-		public CompilationState(string path)
+		/// <param name="filePath"></param>
+		public CompilationState(string filePath)
 		{
-			this.Path = path;
+			this.FilePath = String.IsNullOrEmpty(filePath) ? Guid.NewGuid().ToString("n") : filePath;
 		}
 
 		#endregion Init
 
 		#region Properties
+
+		public List<string> Imports
+		{
+			get
+			{
+				if (this.imports == null)
+				{
+					this.imports = new List<string>();
+				}
+				return this.imports;
+			}
+		}
 
 		public string JbstName
 		{
@@ -65,11 +93,29 @@ namespace JsonFx.Jbst
 			{
 				if (String.IsNullOrEmpty(this.jbstName))
 				{
-					this.jbstName = String.Concat('$', Guid.NewGuid().ToString("n"));
+					this.jbstName = CompilationState.GenerateJbstName(this.FilePath);
 				}
 				return this.jbstName;
 			}
-			set { this.jbstName = this.DeclarationBlock.OwnerName = value; }
+			set { this.jbstName = value; }
+		}
+
+		public JbstDeclarationBlock DeclarationBlock
+		{
+			get
+			{
+				if (this.declarationBlock == null)
+				{
+					this.declarationBlock = new JbstDeclarationBlock();
+				}
+				return this.declarationBlock;
+			}
+		}
+
+		public IEnumerable<Token<CommonTokenType>> Content
+		{
+			get;
+			set;
 		}
 
 		public AutoMarkupType AutoMarkup
@@ -79,5 +125,90 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Properties
+
+		#region JbstCommand Members
+
+		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
+		{
+			this.FormatGlobals(writer);
+
+			// emit namespace or variable
+			if (!EcmaScriptFormatter.WriteNamespaceDeclaration(writer, this.JbstName, null, true))
+			{
+				writer.Write("var ");
+			}
+
+			// assign to named var
+			writer.Write(this.JbstName);
+
+			// emit template body and wrap with ctor
+			writer.Write(" = JsonML.BST(");
+
+			if (this.Content == null)
+			{
+				base.Format(formatter, writer);
+			}
+			else
+			{
+				formatter.Format(this.Content, writer);
+			}
+
+			writer.WriteLine(");");
+
+			if (this.declarationBlock != null)
+			{
+				// emit init block
+				this.declarationBlock.OwnerName = this.JbstName;
+				this.declarationBlock.Format(formatter, writer);
+			}
+		}
+
+		#endregion JbstCommand Members
+
+		#region Utility Methods
+
+		/// <summary>
+		/// Generates a globals list from import directives
+		/// </summary>
+		private void FormatGlobals(TextWriter writer)
+		{
+			this.Imports.Insert(0, "JsonML.BST");
+
+			bool hasGlobals = false;
+			foreach (string import in this.Imports)
+			{
+				string ident = EcmaScriptIdentifier.VerifyIdentifier(import, true);
+
+				if (String.IsNullOrEmpty(ident))
+				{
+					continue;
+				}
+
+				if (hasGlobals)
+				{
+					writer.Write(", ");
+				}
+				else
+				{
+					hasGlobals = true;
+					writer.Write("/*global ");
+				}
+
+				int dot = ident.IndexOf('.');
+				writer.Write((dot < 0) ? ident : ident.Substring(0, dot));
+			}
+
+			if (hasGlobals)
+			{
+				writer.WriteLine(" */");
+			}
+		}
+
+		private static string GenerateJbstName(string filePath)
+		{
+			return String.Concat('$', Regex_JbstName.Replace(filePath, "_"));
+		}
+
+		#endregion Utility Methods
 	}
 }

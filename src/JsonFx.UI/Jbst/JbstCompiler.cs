@@ -33,7 +33,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 
-using JsonFx.Common;
 using JsonFx.EcmaScript;
 using JsonFx.Html;
 using JsonFx.IO;
@@ -122,41 +121,13 @@ namespace JsonFx.Jbst
 		/// <param name="output"></param>
 		private void Compile(string path, IEnumerable<Token<MarkupTokenType>> markup, TextWriter output)
 		{
-			CompilationState state = new CompilationState(path);
-
 			var stream = Stream<Token<MarkupTokenType>>.Create(markup, true);
 
 			// process markup converting code blocks and normalizing whitespace
-			var jbst = this.ProcessTemplate(state, stream);
-			if (jbst.Count < 1)
-			{
-				// empty input results in nothing
-				return;
-			}
+			CompilationState state = this.ProcessTemplate(path, stream);
 
 			// convert markup into JsonML object structure
-			var tokens = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(jbst);
-
-			this.EmitGlobals(state, output);
-
-			// emit namespace or variable
-			if (!EcmaScriptFormatter.WriteNamespaceDeclaration(output, state.JbstName, null, true))
-			{
-				output.Write("var ");
-			}
-
-			// wrap with ctor and assign
-			output.Write(state.JbstName);
-			output.WriteLine(" = JsonML.BST(");
-
-			var formatter = new EcmaScriptFormatter(this.Settings);
-
-			// emit template body
-			formatter.Format(tokens, output);
-
-			// close ctor and emit init block
-			output.WriteLine(");");
-			state.DeclarationBlock.Format(formatter, output);
+			state.Format(new EcmaScriptFormatter(this.Settings), output);
 		}
 
 		#endregion Compile Methods
@@ -169,8 +140,9 @@ namespace JsonFx.Jbst
 		/// <param name="state"></param>
 		/// <param name="markup"></param>
 		/// <returns></returns>
-		private List<Token<MarkupTokenType>> ProcessTemplate(CompilationState state, IStream<Token<MarkupTokenType>> stream)
+		private CompilationState ProcessTemplate(string path, IStream<Token<MarkupTokenType>> stream)
 		{
+			CompilationState state = new CompilationState(path);
 			int rootCount = 0,
 				depth = 0;
 
@@ -275,7 +247,16 @@ namespace JsonFx.Jbst
 				this.TrimTemplateRoot(output);
 			}
 
-			return output;
+			if (output.Count > 0)
+			{
+				state.Content = new JsonMLReader.JsonMLInTransformer { PreserveWhitespace = true }.Transform(output);
+			}
+			else
+			{
+				state.Content = null;
+			}
+
+			return state;
 		}
 
 		private void ProcessCommand(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
@@ -283,11 +264,6 @@ namespace JsonFx.Jbst
 			var token = stream.Pop();
 			DataName commandName = token.Name;
 			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
-			if (commandName == JbstTemplate.CommandName)
-			{
-				// new inner state for nested control
-				state = new CompilationState(state.Path);
-			}
 
 			IDictionary<string, object> attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
 			while (!stream.IsCompleted)
@@ -312,6 +288,8 @@ namespace JsonFx.Jbst
 				var block = token.Value as UnparsedBlock;
 				if (block != null)
 				{
+					// NOTE: currently these are being processed in the context of the parent
+
 					// interpret an unparsed block
 					Token<MarkupTokenType> codeBlock = this.ProcessCodeBlock(state, block);
 					if (codeBlock != null && codeBlock.Value != null)
@@ -325,80 +303,69 @@ namespace JsonFx.Jbst
 				}
 			}
 
-			if (commandName == JbstTemplate.CommandName)
+			if (!isVoid)
+			{
+				state = this.ProcessTemplate(state.FilePath, stream);
+
+				// consume closing command tag
+				if (stream.IsCompleted)
+				{
+					throw new TokenException<MarkupTokenType>(token, "Unexpected end of stream while processing JBST command");
+				}
+				token = stream.Pop();
+				if (token.TokenType != MarkupTokenType.ElementEnd)
+				{
+					throw new TokenException<MarkupTokenType>(token, "Unexpected token while processing JBST command");
+				}
+			}
+
+			JbstTemplateCall command = null;
+			if (commandName == JbstTemplateCall.CommandName)
 			{
 				object name, data, index, count;
 
-				attributes.TryGetValue(JbstTemplate.KeyName, out name);
-				attributes.TryGetValue(JbstTemplate.KeyData, out data);
-				attributes.TryGetValue(JbstTemplate.KeyIndex, out index);
-				attributes.TryGetValue(JbstTemplate.KeyCount, out count);
-
-				var inner = isVoid ? null : this.ProcessTemplate(state, stream);
-
-				if (inner != null)
-				{
-					if (stream.IsCompleted)
-					{
-						throw new TokenException<MarkupTokenType>(token, "Unexpected end of stream while processing JBST command");
-					}
-					token = stream.Pop();
-					if (token.TokenType != MarkupTokenType.ElementEnd)
-					{
-						throw new TokenException<MarkupTokenType>(token, "Unexpected token while processing JBST command");
-					}
-				}
+				attributes.TryGetValue(JbstTemplateCall.KeyName, out name);
+				attributes.TryGetValue(JbstTemplateCall.KeyData, out data);
+				attributes.TryGetValue(JbstTemplateCall.KeyIndex, out index);
+				attributes.TryGetValue(JbstTemplateCall.KeyCount, out count);
 
 				if (name == null)
 				{
 					// anonymous inline template
-					var command = new JbstInlineTemplate
+					command = new JbstInlineTemplate(state)
 					{
 						DataExpr = data,
 						IndexExpr = index,
 						CountExpr = count
 					};
-
-					// TODO: cannot emit as a token or will add delimiters
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
-
-					output.AddRange(inner);
-
-					// TODO: cannot emit as a token or will add delimiters
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command.GetInlineEnd()));
 				}
-				else if (inner == null || inner.Count < 1)
+				else if (state.Content == null)
 				{
 					// simple template reference
-					var command = new JbstTemplateReference
+					command = new JbstTemplateReference(state)
 					{
 						NameExpr = name,
 						DataExpr = data,
 						IndexExpr = index,
 						CountExpr = count
 					};
-
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
 				}
 				else
 				{
 					// wrapper control containing named or anonymous inner-templates
-					var command = new JbstWrapperTemplate
+					command = new JbstWrapperTemplate(state)
 					{
 						NameExpr = name,
 						DataExpr = data,
 						IndexExpr = index,
 						CountExpr = count
 					};
-
-					// TODO: cannot emit as a token or will add delimiters
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
-
-					output.AddRange(inner);
-
-					// TODO: cannot emit as a token or will add delimiters
-					output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command.GetInlineEnd()));
 				}
+			}
+
+			if (command != null)
+			{
+				output.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, command));
 			}
 		}
 
@@ -475,7 +442,7 @@ namespace JsonFx.Jbst
 				case "%$":
 				{
 					// expressions are emitted directly into JBST
-					return new Token<MarkupTokenType>(MarkupTokenType.Primitive, new JbstExtensionBlock(block.Value, state.Path));
+					return new Token<MarkupTokenType>(MarkupTokenType.Primitive, new JbstExtensionBlock(block.Value, state.FilePath));
 				}
 				case "%":
 				{
@@ -598,7 +565,7 @@ namespace JsonFx.Jbst
 				{
 					case "name":
 					{
-						state.JbstName = EcmaScriptIdentifier.EnsureValidIdentifier(token.ValueAsString(), true);
+						state.JbstName = EcmaScriptIdentifier.VerifyIdentifier(token.ValueAsString(), true);
 						break;
 					}
 					case "automarkup":
@@ -624,43 +591,6 @@ namespace JsonFx.Jbst
 						break;
 					}
 				}
-			}
-		}
-
-		/// <summary>
-		/// Generates a globals list from import directives
-		/// </summary>
-		private void EmitGlobals(CompilationState state, TextWriter writer)
-		{
-			bool hasGlobals = false;
-
-			state.Imports.Insert(0, "JsonML.BST");
-			foreach (string import in state.Imports)
-			{
-				string ident = EcmaScriptIdentifier.EnsureValidIdentifier(import, true);
-
-				if (String.IsNullOrEmpty(ident))
-				{
-					continue;
-				}
-
-				if (hasGlobals)
-				{
-					writer.Write(", ");
-				}
-				else
-				{
-					hasGlobals = true;
-					writer.Write("/*global ");
-				}
-
-				int dot = ident.IndexOf('.');
-				writer.Write((dot < 0) ? ident : ident.Substring(0, dot));
-			}
-
-			if (hasGlobals)
-			{
-				writer.WriteLine(" */");
 			}
 		}
 

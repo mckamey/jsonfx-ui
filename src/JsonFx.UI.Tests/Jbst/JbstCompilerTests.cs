@@ -165,8 +165,7 @@ if (""undefined"" === typeof Foo) {
 	Foo = {};
 }
 
-Foo.MyZebraList = JsonML.BST(
-[
+Foo.MyZebraList = JsonML.BST([
 	""div"",
 	{
 		""class"" : ""example""
@@ -203,35 +202,34 @@ Foo.MyZebraList = JsonML.BST(
 		""""/* anonymous inner template */,
 		"" "",
 		function() {
-				return JsonML.BST([
-			"""",
-			"" "",
-			""""/* populate list item for each item of the parent's children property */,
-			"" "",
-			[
-				""li"",
-				{
-					""class"" : function() {
+	return JsonML.BST([
+	"""",
+	""""/* populate list item for each item of the parent's children property */,
+	"" "",
+	[
+		""li"",
+		{
+			""class"" : function() {
 	return Foo.MyZebraList.zebraStripe(this.data.selected, this.index, this.count);
 }
-				},
-				"" "",
-				function() {
+		},
+		"" "",
+		function() {
 	return this.data.label;
 },
-				"" ("",
-				function() {
+		"" ("",
+		function() {
 	return this.index+1;
 },
-				"" of "",
-				function() {
+		"" of "",
+		function() {
 	return this.count;
 },
-				"") ""
-			],
-			"" ""
-		]).dataBind(this.data.children, this.index, this.count);
-			},
+		"") ""
+	],
+	"" ""
+]).dataBind(this.data.children, this.index, this.count);
+},
 		"" ""
 	],
 	"" ""
@@ -276,7 +274,10 @@ Foo.MyZebraList = JsonML.BST(
 		[Trait(TraitName, TraitValue)]
 		public void Compile_EmptyInputText_RendersEmptyString()
 		{
-			var expected = "";
+			var expected =
+@"/*global JsonML */
+var $_Foo_jbst = JsonML.BST(null);
+";
 
 			var input = "";
 
@@ -289,7 +290,10 @@ Foo.MyZebraList = JsonML.BST(
 		[Trait(TraitName, TraitValue)]
 		public void Compile_EmptyInputReader_RendersEmptyString()
 		{
-			var expected = "";
+			var expected =
+@"/*global JsonML */
+var $_Foo_jbst = JsonML.BST(null);
+";
 
 			var actual = new StringBuilder();
 			using (StringWriter writer = new StringWriter(actual))

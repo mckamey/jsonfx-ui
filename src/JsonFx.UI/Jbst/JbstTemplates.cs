@@ -39,7 +39,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of template/control commands
 	/// </summary>
-	internal abstract class JbstTemplate : JbstCommand
+	internal abstract class JbstTemplateCall : JbstCommand
 	{
 		#region Constants
 
@@ -60,12 +60,26 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
+		protected readonly CompilationState State;
 		private object nameExpr;
 		private object dataExpr;
 		private object indexExpr;
 		private object countExpr;
 
 		#endregion Fields
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="state"></param>
+		public JbstTemplateCall(CompilationState state)
+		{
+			this.State = state;
+		}
+
+		#endregion Init
 
 		#region Properties
 
@@ -77,32 +91,32 @@ namespace JsonFx.Jbst
 
 		public object DataExpr
 		{
-			get { return (this.dataExpr ?? JbstTemplate.DefaultDataExpression); }
+			get { return (this.dataExpr ?? JbstTemplateCall.DefaultDataExpression); }
 			set { this.dataExpr = value; }
 		}
 
 		public object IndexExpr
 		{
-			get { return (this.indexExpr ?? JbstTemplate.DefaultIndexExpression); }
+			get { return (this.indexExpr ?? JbstTemplateCall.DefaultIndexExpression); }
 			set { this.indexExpr = value; }
 		}
 
 		public object CountExpr
 		{
-			get { return (this.countExpr ?? JbstTemplate.DefaultCountExpression); }
+			get { return (this.countExpr ?? JbstTemplateCall.DefaultCountExpression); }
 			set { this.countExpr = value; }
 		}
 
 		#endregion Properties
+		
+		#region Utility Methods
 
-		#region Methods
-
-		protected string RenderExpression(ITextFormatter<CommonTokenType> formatter, object argument)
+		public static string FormatExpression(ITextFormatter<CommonTokenType> formatter, object argument)
 		{
 			if (argument is string)
 			{
 				// directly use as inline expression
-				return ((string)argument??"").Trim();
+				return ((string)argument).Trim();
 			}
 
 			if (argument is JbstExpressionBlock)
@@ -119,7 +133,7 @@ namespace JsonFx.Jbst
 					((JbstCommand)argument).Format(formatter, writer);
 
 					// convert to anonymous function call expression
-					return String.Format(JbstTemplate.FunctionEvalExpression, writer.GetStringBuilder().ToString().Trim());
+					return String.Format(FunctionEvalExpression, writer.GetStringBuilder().ToString().Trim());
 				}
 			}
 
@@ -127,13 +141,13 @@ namespace JsonFx.Jbst
 			return formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, argument) });
 		}
 
-		#endregion Methods
+		#endregion Utility Methods
 	}
 
 	/// <summary>
 	/// Internal representation of a reference to a named template
 	/// </summary>
-	internal class JbstTemplateReference : JbstTemplate
+	internal class JbstTemplateReference : JbstTemplateCall
 	{
 		#region Constants
 
@@ -144,16 +158,29 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="state"></param>
+		public JbstTemplateReference(CompilationState state)
+			: base(state)
+		{
+		}
+
+		#endregion Init
+
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(
 				JbstTemplateReference.TemplateReferenceFormat,
-				this.RenderExpression(formatter, this.NameExpr),
-				this.RenderExpression(formatter, this.DataExpr),
-				this.RenderExpression(formatter, this.IndexExpr),
-				this.RenderExpression(formatter, this.CountExpr));
+				FormatExpression(formatter, this.NameExpr),
+				FormatExpression(formatter, this.DataExpr),
+				FormatExpression(formatter, this.IndexExpr),
+				FormatExpression(formatter, this.CountExpr));
 		}
 
 		#endregion JbstCommand Members
@@ -162,7 +189,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of an anonymous inline template
 	/// </summary>
-	internal class JbstInlineTemplate : JbstTemplate
+	internal class JbstInlineTemplate : JbstTemplateCall
 	{
 		#region Constants
 
@@ -176,43 +203,40 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region Fields
-
-		private bool isEnd;
-
-		#endregion Fields
-
-		#region Methods
+		#region Init
 
 		/// <summary>
-		/// Gets the matching end token
+		/// Ctor
 		/// </summary>
-		/// <returns></returns>
-		public JbstInlineTemplate GetInlineEnd()
+		/// <param name="state"></param>
+		public JbstInlineTemplate(CompilationState state)
+			: base(state)
 		{
-			var end = (JbstInlineTemplate)this.MemberwiseClone();
-			end.isEnd = true;
-			return end;
 		}
 
-		#endregion Methods
+		#endregion Init
 
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			if (this.isEnd)
+			writer.Write(JbstInlineTemplate.InlineTemplateStart);
+
+			if (this.State == null ||
+				this.State.Content == null)
 			{
-				writer.Write(
-					JbstInlineTemplate.InlineTemplateEndFormat,
-					this.RenderExpression(formatter, this.DataExpr),
-					this.RenderExpression(formatter, this.IndexExpr),
-					this.RenderExpression(formatter, this.CountExpr));
+				base.Format(formatter, writer);
 			}
 			else
 			{
-				writer.Write(JbstInlineTemplate.InlineTemplateStart);
+				formatter.Format(this.State.Content, writer);
 			}
+
+			writer.Write(
+				JbstInlineTemplate.InlineTemplateEndFormat,
+				FormatExpression(formatter, this.DataExpr),
+				FormatExpression(formatter, this.IndexExpr),
+				FormatExpression(formatter, this.CountExpr));
 		}
 
 		#endregion JbstCommand Members
@@ -221,7 +245,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of a wrapper control containing named or anonymous inner-templates
 	/// </summary>
-	internal class JbstWrapperTemplate : JbstTemplate
+	internal class JbstWrapperTemplate : JbstTemplateCall
 	{
 		#region Constants
 
@@ -235,43 +259,32 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region Fields
-
-		private bool isEnd;
-
-		#endregion Fields
-
-		#region Methods
+		#region Init
 
 		/// <summary>
-		/// Gets the matching end token
+		/// Ctor
 		/// </summary>
-		/// <returns></returns>
-		public JbstWrapperTemplate GetInlineEnd()
+		/// <param name="state"></param>
+		public JbstWrapperTemplate(CompilationState state)
+			: base(state)
 		{
-			var end = (JbstWrapperTemplate)this.MemberwiseClone();
-			end.isEnd = true;
-			return end;
 		}
 
-		#endregion Methods
+		#endregion Init
 
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
-			if (this.isEnd)
-			{
-				writer.Write(JbstWrapperTemplate.WrapperEnd);
-			}
-			else
-			{
-				writer.Write(JbstWrapperTemplate.WrapperStartFormat,
-					this.RenderExpression(formatter, this.NameExpr),
-					this.RenderExpression(formatter, this.DataExpr),
-					this.RenderExpression(formatter, this.IndexExpr),
-					this.RenderExpression(formatter, this.CountExpr));
-			}
+			writer.Write(JbstWrapperTemplate.WrapperStartFormat,
+				FormatExpression(formatter, this.NameExpr),
+				FormatExpression(formatter, this.DataExpr),
+				FormatExpression(formatter, this.IndexExpr),
+				FormatExpression(formatter, this.CountExpr));
+
+			// TODO: emit template object here
+
+			writer.Write(JbstWrapperTemplate.WrapperEnd);
 		}
 
 		#endregion JbstCommand Members
@@ -280,7 +293,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of a placeholder control
 	/// </summary>
-	internal class JbstPlaceholder : JbstTemplate
+	internal class JbstPlaceholder : JbstTemplateCall
 	{
 		#region Constants
 
@@ -301,12 +314,26 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="state"></param>
+		public JbstPlaceholder()
+			: base(null)
+		{
+		}
+
+		#endregion Init
+
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<CommonTokenType> formatter, TextWriter writer)
 		{
 			writer.Write(JbstPlaceholder.PlaceholderStatementStart);
 
+			// escape as a string literal
 			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, JbstPlaceholder.InlinePrefix+this.NameExpr) });
 
 			writer.Write(
