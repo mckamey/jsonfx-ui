@@ -438,6 +438,70 @@ var WrapperControl = JsonML.BST([
 			Assert.Equal(expected, actual);
 		}
 
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_SwitcherControl_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""SwitcherControl"" Language=""JavaScript"" %>
+<script type=""text/javascript"">
+
+	/* switcher function (called once per data item) returns the appropriately bound template */
+	SwitcherControl.mySwitcher = function() {
+		switch (this.data.fooType) {
+			case ""Type1"":
+				return FooType1Jbst;
+			case ""Type2"":
+				return FooType2Jbst;
+			case ""Type3"":
+				/* suppress Type3 items for this view */
+				return null;
+			case ""Type4"":
+			default:
+				return FooType4Jbst;
+		}
+	};
+
+</script>
+
+<!-- declaratively embedding a reference to the switcher value binding the list of children -->
+<jbst:control name=""SwitcherControl.mySwitcher"" data=""this.data.fooChildren"" />";
+
+			var expected =
+@"/*global JsonML */
+var SwitcherControl = JsonML.BST([
+	"""",
+	"" "",
+	""""/* declaratively embedding a reference to the switcher value binding the list of children */,
+	"" "",
+	function() {
+	return JsonML.BST(SwitcherControl.mySwitcher).dataBind(this.data.fooChildren, this.index, this.count);
+}
+]);
+// initialize template in the context of ""this""
+(function() {
+	/* switcher function (called once per data item) returns the appropriately bound template */
+	SwitcherControl.mySwitcher = function() {
+		switch (this.data.fooType) {
+			case ""Type1"":
+				return FooType1Jbst;
+			case ""Type2"":
+				return FooType2Jbst;
+			case ""Type3"":
+				/* suppress Type3 items for this view */
+				return null;
+			case ""Type4"":
+			default:
+				return FooType4Jbst;
+		}
+	};
+}).call(SwitcherControl);";
+
+			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+
+			Assert.Equal(expected, actual);
+		}
+
 		#endregion Foo Tests
 
 		#region Input Edge Case Tests
