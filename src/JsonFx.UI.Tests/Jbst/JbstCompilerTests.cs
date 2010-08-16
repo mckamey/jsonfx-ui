@@ -420,14 +420,15 @@ var WrapperControl = JsonML.BST([
 			""""/* this is where the outer JBST control's content is inserted */,
 			"" "",
 			function() {
-				var inline = ""$"",
-					parts = this.args;
+	var inline = ""$"",
+		parts = this.args;
 
-				if (parts && parts[inline]) {
-					return JsonML.BST(parts[inline]).dataBind(this.data, this.index, this.count, parts);
-				}
-			}
-		]
+	if (parts && parts[inline]) {
+		return JsonML.BST(parts[inline]).dataBind(this.data, this.index, this.count, parts);
+	}
+}
+		],
+		"" ""
 	]
 ]);
 ";

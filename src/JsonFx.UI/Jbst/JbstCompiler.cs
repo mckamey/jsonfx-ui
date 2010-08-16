@@ -261,7 +261,7 @@ namespace JsonFx.Jbst
 		private void ProcessCommand(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
 		{
 			var token = stream.Pop();
-			DataName commandName = token.Name;
+			string commandName = token.Name.ToPrefixedName();
 			bool isVoid = (token.TokenType == MarkupTokenType.ElementVoid);
 
 			IDictionary<string, object> attributes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
@@ -304,6 +304,7 @@ namespace JsonFx.Jbst
 
 			if (!isVoid)
 			{
+				// new state created for inner context
 				state = this.ProcessTemplate(state.FilePath, stream);
 
 				// consume closing command tag
@@ -318,16 +319,16 @@ namespace JsonFx.Jbst
 				}
 			}
 
+			object name, data, index, count;
+
+			attributes.TryGetValue(JbstTemplateCall.KeyName, out name);
+			attributes.TryGetValue(JbstTemplateCall.KeyData, out data);
+			attributes.TryGetValue(JbstTemplateCall.KeyIndex, out index);
+			attributes.TryGetValue(JbstTemplateCall.KeyCount, out count);
+
 			JbstTemplateCall command = null;
-			if (commandName == JbstTemplateCall.CommandName)
+			if (StringComparer.OrdinalIgnoreCase.Equals(commandName, JbstTemplateCall.CommandName))
 			{
-				object name, data, index, count;
-
-				attributes.TryGetValue(JbstTemplateCall.KeyName, out name);
-				attributes.TryGetValue(JbstTemplateCall.KeyData, out data);
-				attributes.TryGetValue(JbstTemplateCall.KeyIndex, out index);
-				attributes.TryGetValue(JbstTemplateCall.KeyCount, out count);
-
 				if (name == null)
 				{
 					// anonymous inline template
@@ -360,6 +361,17 @@ namespace JsonFx.Jbst
 						CountExpr = count
 					};
 				}
+			}
+			else if (StringComparer.OrdinalIgnoreCase.Equals(commandName, JbstPlaceholder.CommandName))
+			{
+				// wrapper control containing named or anonymous inner-templates
+				command = new JbstPlaceholder()
+				{
+					NameExpr = name,
+					DataExpr = data,
+					IndexExpr = index,
+					CountExpr = count
+				};
 			}
 
 			if (command != null)

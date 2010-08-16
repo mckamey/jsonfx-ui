@@ -43,7 +43,7 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
-		public static readonly DataName CommandName = new DataName("control", JbstCommand.Prefix, null);
+		public static readonly string CommandName = JbstCommand.Prefix+":control";
 
 		public const string KeyName = "name";	// id
 		public const string KeyData = "data";	// model
@@ -283,6 +283,7 @@ namespace JsonFx.Jbst
 				FormatExpression(formatter, this.CountExpr));
 
 			// TODO: emit template object here
+			writer.Write("{}");
 
 			writer.Write(JbstWrapperTemplate.WrapperEnd);
 		}
@@ -296,6 +297,8 @@ namespace JsonFx.Jbst
 	internal class JbstPlaceholder : JbstTemplateCall
 	{
 		#region Constants
+
+		public static readonly new string CommandName = JbstCommand.Prefix+":placeholder";
 
 		public const string InlinePrefix = "$";
 
@@ -334,7 +337,7 @@ namespace JsonFx.Jbst
 			writer.Write(JbstPlaceholder.PlaceholderStatementStart);
 
 			// escape as a string literal
-			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, JbstPlaceholder.InlinePrefix+this.NameExpr) });
+			formatter.Format(new[] { new Token<CommonTokenType>(CommonTokenType.Primitive, JbstPlaceholder.InlinePrefix+this.NameExpr) }, writer);
 
 			writer.Write(
 				JbstPlaceholder.PlaceholderStatementEndFormat,
