@@ -302,6 +302,141 @@ this.myInitTime = this.generateValue();
 			Assert.Equal(expected, actual);
 		}
 
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_VariousNestedControls_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""NestedControls"" Language=""JavaScript"" %>
+
+<ul>
+<!-- declaratively embedding the same JBST as in the programmatic example -->
+<!-- this calls the Example.myOtherJBST control once for each of the childList items -->
+<jbst:control name=""Example.myOtherJBST"" data=""<%= this.data.childList %>"" />
+</ul>
+
+<!-- declaratively embedding a simple child control which uses the same data as the parent -->
+<jbst:control name=""Example.myBasicControl"" />
+
+<!-- declaratively embedding a child control that is a wrapper -->
+<jbst:control name=""Example.myWrapperControl"">
+
+<!-- this content is inserted inside the other JBST control -->
+<a href=""<%= this.data.linkUrl %>""><%= this.data.linkLabel %></a>
+
+</jbst:control>";
+
+			var expected =
+@"/*global JsonML */
+var NestedControls = JsonML.BST([
+	"""",
+	"" "",
+	[
+		""ul"",
+		"" "",
+		""""/* declaratively embedding the same JBST as in the programmatic example */,
+		"" "",
+		""""/* this calls the Example.myOtherJBST control once for each of the childList items */,
+		"" "",
+		function() {
+	return JsonML.BST(Example.myOtherJBST).dataBind(this.data.childList, this.index, this.count);
+}
+	],
+	"" "",
+	""""/* declaratively embedding a simple child control which uses the same data as the parent */,
+	"" "",
+	function() {
+	return JsonML.BST(Example.myBasicControl).dataBind(this.data, this.index, this.count);
+},
+	""""/* declaratively embedding a child control that is a wrapper */,
+	"" "",
+	function() {
+	return JsonML.BST(Example.myWrapperControl).dataBind(this.data, this.index, this.count, {
+		$: 
+			[
+				"""",
+				"" "",
+				""""/* this content is inserted inside the other JBST control */,
+				"" "",
+				[
+					""a"",
+					{
+						href: 
+							function() {
+	return this.data.linkUrl;
+}
+					},
+					function() {
+	return this.data.linkLabel;
+}
+				],
+				"" ""
+			]
+	});
+			}
+]);";
+
+			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+
+			Assert.Equal(expected, actual);
+		}
+
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_WrapperControl_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""WrapperControl"" Language=""JavaScript"" %>
+
+	<!-- declaratively define a simple wrapper -->
+	<div class=""MyOnionSkinWrapper1"">
+		<div class=""MyOnionSkinWrapper2"">
+
+		<!-- this is where the outer JBST control's content is inserted -->
+		<jbst:placeholder />
+
+	</div>
+</div>";
+
+			var expected =
+@"/*global JsonML */
+var WrapperControl = JsonML.BST([
+	"""",
+	"" "",
+	""""/* declaratively define a simple wrapper */,
+	"" "",
+	[
+		""div"",
+		{
+			""class"" : ""MyOnionSkinWrapper1""
+		},
+		"" "",
+		[
+			""div"",
+			{
+				""class"" : ""MyOnionSkinWrapper2""
+			},
+			"" "",
+			""""/* this is where the outer JBST control's content is inserted */,
+			"" "",
+			function() {
+				var inline = ""$"",
+					parts = this.args;
+
+				if (parts && parts[inline]) {
+					return JsonML.BST(parts[inline]).dataBind(this.data, this.index, this.count, parts);
+				}
+			}
+		]
+	]
+]);
+";
+
+			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+
+			Assert.Equal(expected, actual);
+		}
+
 		#endregion Foo Tests
 
 		#region Input Edge Case Tests
