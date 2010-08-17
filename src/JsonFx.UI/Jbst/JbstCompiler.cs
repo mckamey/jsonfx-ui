@@ -56,9 +56,30 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
+		private readonly EcmaScriptIdentifier DefaultNamespace;
 		private readonly DataWriterSettings Settings = new DataWriterSettings { PrettyPrint=true };
 
 		#endregion Fields
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		public JbstCompiler()
+			: this(null)
+		{
+		}
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		public JbstCompiler(EcmaScriptIdentifier defaultNamespace)
+		{
+			this.DefaultNamespace = defaultNamespace;
+		}
+
+		#endregion Init
 
 		#region Compile Methods
 
@@ -149,7 +170,7 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		private CompilationState ProcessTemplate(string path, IStream<Token<MarkupTokenType>> stream)
 		{
-			CompilationState state = new CompilationState(path);
+			CompilationState state = new CompilationState(path, this.DefaultNamespace);
 			int rootCount = 0,
 				depth = 0;
 

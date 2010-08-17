@@ -54,6 +54,7 @@ namespace JsonFx.Jbst
 
 		public readonly string FilePath;
 
+		private readonly EcmaScriptIdentifier DefaultNamespace;
 		private string jbstName;
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
@@ -67,9 +68,10 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="filePath"></param>
-		public CompilationState(string filePath)
+		public CompilationState(string filePath, EcmaScriptIdentifier defaultNamespace)
 		{
-			this.FilePath = String.IsNullOrEmpty(filePath) ? Guid.NewGuid().ToString("n") : filePath;
+			this.DefaultNamespace = defaultNamespace ?? String.Empty;
+			this.FilePath = filePath ?? String.Empty;
 		}
 
 		#endregion Init
@@ -94,7 +96,7 @@ namespace JsonFx.Jbst
 			{
 				if (String.IsNullOrEmpty(this.jbstName))
 				{
-					this.jbstName = CompilationState.GenerateJbstName(this.FilePath);
+					this.jbstName = CompilationState.GenerateJbstName(this.FilePath, this.DefaultNamespace);
 				}
 				return this.jbstName;
 			}
@@ -253,9 +255,34 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private static string GenerateJbstName(string filePath)
+		private static string GenerateJbstName(string filePath, EcmaScriptIdentifier defaultNamespace)
 		{
-			return String.Concat('$', Regex_JbstName.Replace(filePath, "_"));
+			if (String.IsNullOrEmpty(filePath))
+			{
+				filePath = String.Concat('$', Guid.NewGuid().ToString("n"));
+			}
+			else
+			{
+				int start = filePath.LastIndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar })+1;
+				int end = filePath.IndexOf('.', start);
+				if (end > start)
+				{
+					filePath = filePath.Substring(start, end-start);
+				}
+				else
+				{
+					filePath = filePath.Substring(start);
+				}
+
+				filePath = Regex_JbstName.Replace(filePath, "_");
+			}
+
+			if (String.IsNullOrEmpty(defaultNamespace))
+			{
+				return filePath;
+			}
+
+			return String.Concat(defaultNamespace, '.', filePath);
 		}
 
 		#endregion Utility Methods

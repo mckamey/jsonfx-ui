@@ -553,12 +553,19 @@ var SwitcherControl = JsonML.BST([
 		{
 			var expected =
 @"/*global JsonML */
-var $_Foo_jbst = JsonML.BST(null);
+
+/* namespace MyNamespace */
+var MyNamespace;
+if (""undefined"" === typeof MyNamespace) {
+	MyNamespace = {};
+}
+
+MyNamespace.Foo = JsonML.BST(null);
 ";
 
 			var input = "";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			var actual = new JbstCompiler("MyNamespace").Compile("~/Foo.jbst", input);
 
 			Assert.Equal(expected, actual);
 		}
@@ -569,7 +576,7 @@ var $_Foo_jbst = JsonML.BST(null);
 		{
 			var expected =
 @"/*global JsonML */
-var $_Foo_jbst = JsonML.BST(null);
+var Foo = JsonML.BST(null);
 ";
 
 			var actual = new StringBuilder();
