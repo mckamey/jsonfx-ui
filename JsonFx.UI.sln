@@ -5,6 +5,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonFx.UI", "src\JsonFx.UI\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonFx.UI.Tests", "src\JsonFx.UI.Tests\JsonFx.UI.Tests.csproj", "{FE0CA37D-2137-4CAC-B6AE-C39209F754A0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "JsonFx.UI.Designer", "src\JsonFx.UI.Designer\JsonFx.UI.Designer.csproj", "{EE18034C-3314-4595-9F1E-546FECA3CDF4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,6 +26,12 @@ Global
 		{FE0CA37D-2137-4CAC-B6AE-C39209F754A0}.Release|Any CPU.Build.0 = Release|Any CPU
 		{FE0CA37D-2137-4CAC-B6AE-C39209F754A0}.Signed|Any CPU.ActiveCfg = Release|Any CPU
 		{FE0CA37D-2137-4CAC-B6AE-C39209F754A0}.Signed|Any CPU.Build.0 = Release|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Signed|Any CPU.ActiveCfg = Signed|Any CPU
+		{EE18034C-3314-4595-9F1E-546FECA3CDF4}.Signed|Any CPU.Build.0 = Signed|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
