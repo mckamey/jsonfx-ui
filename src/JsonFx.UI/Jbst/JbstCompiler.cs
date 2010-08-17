@@ -75,7 +75,7 @@ namespace JsonFx.Jbst
 			}
 
 			// parse the markup
-			var markup = new HtmlTokenizer { AutoBalanceTags = true }.GetTokens(input);
+			var markup = this.GetTokenizer().GetTokens(input);
 
 			// translate to script
 			using (StringWriter writer = new StringWriter())
@@ -104,7 +104,7 @@ namespace JsonFx.Jbst
 			}
 
 			// parse the markup
-			var markup = new HtmlTokenizer { AutoBalanceTags = true }.GetTokens(input);
+			var markup = this.GetTokenizer().GetTokens(input);
 
 			// translate to script
 			this.Compile(path, markup, output);
@@ -125,6 +125,16 @@ namespace JsonFx.Jbst
 
 			// convert markup into JsonML object structure
 			state.Format(new EcmaScriptFormatter(this.Settings), output);
+		}
+
+		private HtmlTokenizer GetTokenizer()
+		{
+			return new HtmlTokenizer
+			{
+				AutoBalanceTags = true,
+				UnparsedTags = new[] { "script", "style" },
+				UnwrapUnparsedComments = true
+			};
 		}
 
 		#endregion Compile Methods
