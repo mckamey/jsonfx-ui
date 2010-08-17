@@ -33,6 +33,7 @@ ECHO Building specific releases for .NET Framework (%FrameworkVer%)...
 ECHO.
 
 FOR %%i IN (%FrameworkVer%) DO "%MSBuild%" src/JsonFx.UI/JsonFx.UI.csproj /target:rebuild /property:TargetFrameworkVersion=%%i;Configuration=%Configuration%
+FOR %%i IN (v4.0) DO "%MSBuild%" src/JsonFx.UI.Designer/JsonFx.UI.Designer.csproj /target:rebuild /property:TargetFrameworkVersion=%%i;Configuration=%Configuration%
 
 :END
 POPD
