@@ -16,7 +16,7 @@
     <OutputAssemblyLabel Condition=" '$(TargetFrameworkIdentifier)' != '' ">$(Configuration)_$(TargetFrameworkVersion)_$(TargetFrameworkIdentifier)</OutputAssemblyLabel>
     <OutputAssemblyLabel Condition=" '$(TargetFrameworkProfile)' != '' And '$(TargetFrameworkProfile)' != 'Client' ">$(Configuration)_$(TargetFrameworkVersion)_$(TargetFrameworkProfile)</OutputAssemblyLabel>
     <OutputPath>..\..\build\$(OutputAssemblyLabel)</OutputPath>
-    <DocumentationFile>$(OutputPath)\JsonFx.XML</DocumentationFile>
+    <DocumentationFile>$(OutputPath)\$(AssemblyName).xml</DocumentationFile>
     <MapFileExtensions>true</MapFileExtensions>
     <UseApplicationTrust>false</UseApplicationTrust>
   </PropertyGroup>
@@ -67,8 +67,7 @@
   </PropertyGroup>
   <PropertyGroup Condition=" '$(TargetFrameworkVersion)' == 'v2.0' Or '$(TargetFrameworkVersion)' == 'v3.0' ">
     <DefineConstants>$(DefineConstants);NET20</DefineConstants>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="JsonFx">
