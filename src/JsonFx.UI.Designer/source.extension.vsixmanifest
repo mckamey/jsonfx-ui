@@ -1,25 +1,26 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Vsix Version="1.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2010">
-	<Identifier Id="JbstGenerator.dd5d28d6-3a7f-43fe-bb5e-9fab5be35b09">
+	<Identifier Id="JsonFx_UI.JbstGenerator">
 		<Name>JbstGenerator</Name>
 		<Author>JsonFx</Author>
 		<Version>2.0</Version>
-		<Description xml:space="preserve">Visual Studio extension for JsonFx</Description>
+		<Description xml:space="preserve">JsonFx UI Template compiler</Description>
 		<Locale>1033</Locale>
+		<MoreInfoUrl>http://github.com/jsonfx/jsonfx-ui</MoreInfoUrl>
+		<License>License.txt</License>
+		<GettingStartedGuide>http://jsonfx.net</GettingStartedGuide>
 		<SupportedProducts>
 			<VisualStudio Version="10.0">
 				<Edition>Ultimate</Edition>
 				<Edition>Premium</Edition>
 				<Edition>Pro</Edition>
-				<Edition>Express_All</Edition>
 			</VisualStudio>
 		</SupportedProducts>
 		<SupportedFrameworkRuntimeEdition MinVersion="4.0" MaxVersion="4.0" />
 	</Identifier>
-	<References>
-		<!--Add References here-->
-	</References>
+	<References />
 	<Content>
-		<!--<VsPackage></VsPackage>-->
+		<VsPackage>JsonFx.UI.Designer.pkgdef</VsPackage>
+		<ItemTemplate>ItemTemplates</ItemTemplate>
 	</Content>
 </Vsix>

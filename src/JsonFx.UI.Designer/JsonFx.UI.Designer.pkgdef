@@ -1,0 +1,47 @@
+Windows Registry Editor Version 5.00
+
+[$RootKey$\CLSID\{A4863538-A079-4713-9CE1-3563B751F565}]
+@="Generator for JsonFx UI Templates (JBST)"
+"InprocServer32"="$System$\MSCOREE.DLL"
+"ThreadingModel"="Both"
+"Class"="JsonFx.UI.Designer.JbstGenerator"
+"CodeBase"="$PackageFolder$\JsonFx.UI.Designer.dll"
+
+[$RootKey$\Languages\File Extensions\.jbst]
+"unused"="HTML"
+@="{58E975A0-F8FE-11D2-A6AE-00104BCC7269}"
+
+[$RootKey$\Editors\{58E975A0-F8FE-11D2-A6AE-00104BCC7269}\Extensions]
+"jbst"=dword:00000028
+
+[$RootKey$\Generators\{FAE04EC1-301F-11D3-BF4B-00C04F79EFBC}\.jbst]
+@="JbstGenerator"
+
+[$RootKey$\Generators\{164B10B9-B200-11D0-8C61-00A0C91E29D5}\.jbst]
+@="JbstGenerator"
+
+[$RootKey$\Generators\{F2A71F9B-5D33-465A-A702-920D77279786}\.jbst]
+@="JbstGenerator"
+
+[$RootKey$\Generators\{E6FDF8B0-F3D1-11D4-8576-0002A516ECE8}\.jbst]
+@="JbstGenerator"
+
+[$RootKey$\Generators\{FAE04EC1-301F-11D3-BF4B-00C04F79EFBC}\JbstGenerator]
+@="JBST Code Generator (C#)"
+"CLSID"="{A4863538-A079-4713-9CE1-3563B751F565}"
+"GeneratesDesignTimeSource"=dword:00000001
+
+[$RootKey$\Generators\{164B10B9-B200-11D0-8C61-00A0C91E29D5}\JbstGenerator]
+@="JBST Code Generator (VB)"
+"CLSID"="{A4863538-A079-4713-9CE1-3563B751F565}"
+"GeneratesDesignTimeSource"=dword:00000001
+
+[$RootKey$\Generators\{F2A71F9B-5D33-465A-A702-920D77279786}\JbstGenerator]
+@="JBST Code Generator (F#)"
+"CLSID"="{A4863538-A079-4713-9CE1-3563B751F565}"
+"GeneratesDesignTimeSource"=dword:00000001
+
+[$RootKey$\Generators\{E6FDF8B0-F3D1-11D4-8576-0002A516ECE8}\JbstGenerator]
+@="JBST Code Generator (J#)"
+"CLSID"="{A4863538-A079-4713-9CE1-3563B751F565}"
+"GeneratesDesignTimeSource"=dword:00000001

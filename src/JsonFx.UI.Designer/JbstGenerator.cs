@@ -40,8 +40,10 @@ namespace JsonFx.UI.Designer
 {
 	[ComVisible(true)]
 	[Guid("A4863538-A079-4713-9CE1-3563B751F565")]
-	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (csproj)", "{fae04ec1-301f-11d3-bf4b-00c04f79efbc}", GeneratesDesignTimeSource=true)]
-	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (vbproj)", "{164b10b9-b200-11d0-8c61-00a0c91e29d5}", GeneratesDesignTimeSource=true)]
+	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (C#)", "{fae04ec1-301f-11d3-bf4b-00c04f79efbc}", GeneratesDesignTimeSource=true)]
+	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (VB)", "{164b10b9-b200-11d0-8c61-00a0c91e29d5}", GeneratesDesignTimeSource=true)]
+	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (F#)", "{F2A71F9B-5D33-465A-A702-920D77279786}", GeneratesDesignTimeSource=true)]
+	[CodeGeneratorRegistration(typeof(JbstGenerator), "JBST Code Generator (J#)", "{E6FDF8B0-F3D1-11D4-8576-0002A516ECE8}", GeneratesDesignTimeSource=true)]
 	[ProvideObject(typeof(JbstGenerator))]
 	public class JbstGenerator : BaseCodeGenerator
 	{
