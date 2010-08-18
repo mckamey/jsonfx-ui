@@ -29,10 +29,13 @@
 #endregion License
 
 using System;
-using System.Web.Hosting;
+//using System.Web.Hosting;
 
 namespace JsonFx.Utils
 {
+	/// <summary>
+	/// Resolves paths between AppRelative and AppAbsolute
+	/// </summary>
 	internal static class PathUtility
 	{
 		#region Path Resolution Methods
@@ -45,7 +48,7 @@ namespace JsonFx.Utils
 			}
 
 			// ensure app-relative BuildManager paths
-			string appRoot = HostingEnvironment.ApplicationVirtualPath;
+			string appRoot = "/";//HostingEnvironment.ApplicationVirtualPath;// TODO: find HostingEnvironment replacement
 			if (appRoot != null && appRoot.Length > 1 &&
 				path.StartsWith(appRoot, StringComparison.OrdinalIgnoreCase))
 			{
@@ -64,7 +67,7 @@ namespace JsonFx.Utils
 			// TODO: improve efficiency
 			path = EnsureAppRelative(path).TrimStart('~');
 
-			return HostingEnvironment.ApplicationVirtualPath+path;
+			return /*HostingEnvironment.ApplicationVirtualPath+*/"/"+path;// TODO: find HostingEnvironment replacement
 		}
 
 		#endregion Path Resolution Methods

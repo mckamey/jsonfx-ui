@@ -30,7 +30,6 @@
 
 using System;
 using System.IO;
-using System.Web.Compilation;
 
 using JsonFx.Model;
 using JsonFx.Serialization;
@@ -41,6 +40,8 @@ namespace JsonFx.Jbst.Extensions
 	internal class ResourceJbstExtension : JbstExtension
 	{
 		#region Constants
+
+		private static readonly char[] KeyDelim = { ',' };
 
 		private const string ResourceLookupBegin =
 @"function() {
@@ -54,7 +55,8 @@ namespace JsonFx.Jbst.Extensions
 
 		#region Fields
 
-		private readonly ResourceExpressionFields ResKey;
+		private readonly string ClassKey;
+		private readonly string ResourceKey;
 		private string globalizationKey = null;
 
 		#endregion Fields
@@ -69,7 +71,19 @@ namespace JsonFx.Jbst.Extensions
 		protected internal ResourceJbstExtension(string value, string path)
 			: base(value, path)
 		{
-			this.ResKey = ResourceExpressionBuilder.ParseExpression(this.Value);
+			if (value == null)
+			{
+				value = String.Empty;
+			}
+
+			// split on first ','
+			string[] parts = value.Split(ResourceJbstExtension.KeyDelim, 2, StringSplitOptions.RemoveEmptyEntries);
+			if (parts.Length > 1)
+			{
+				this.ClassKey = parts[1].Trim();
+			}
+
+			this.ResourceKey = parts[0].Trim();
 		}
 
 		#endregion Init
@@ -85,7 +99,7 @@ namespace JsonFx.Jbst.Extensions
 			{
 				if (this.globalizationKey == null)
 				{
-					this.globalizationKey = ResourceJbstExtension.GetKey(this.ResKey, this.Path);
+					this.globalizationKey = ResourceJbstExtension.GetKey(this.ClassKey, this.ResourceKey, this.Path);
 				}
 				return this.globalizationKey;
 			}
@@ -97,7 +111,7 @@ namespace JsonFx.Jbst.Extensions
 
 		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
-			if (this.ResKey == null)
+			if (this.ResourceKey == null)
 			{
 				base.Format(formatter, writer);
 				return;
@@ -121,25 +135,21 @@ namespace JsonFx.Jbst.Extensions
 		/// <param name="fields"></param>
 		/// <param name="path"></param>
 		/// <returns></returns>
-		public static string GetKey(ResourceExpressionFields fields, string path)
+		public static string GetKey(string classKey, string resourceKey, string path)
 		{
-			if (fields == null)
-			{
-				return String.Empty;
-			}
-			if (String.IsNullOrEmpty(fields.ClassKey))
+			if (String.IsNullOrEmpty(classKey))
 			{
 				if (String.IsNullOrEmpty(path))
 				{
-					return fields.ResourceKey;
+					return resourceKey;
 				}
 
 				path = PathUtility.EnsureAppRelative(path).TrimStart('~');
 
-				return path + ',' + fields.ResourceKey;
+				return path + ',' + resourceKey;
 			}
 
-			return fields.ClassKey + ',' + fields.ResourceKey;
+			return classKey + ',' + resourceKey;
 		}
 
 		#endregion Utility Methods
