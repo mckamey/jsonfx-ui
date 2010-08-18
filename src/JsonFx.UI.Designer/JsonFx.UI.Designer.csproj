@@ -19,7 +19,7 @@
     <DocumentationFile>$(OutputPath)\$(AssemblyName).xml</DocumentationFile>
     <MapFileExtensions>true</MapFileExtensions>
     <UseApplicationTrust>false</UseApplicationTrust>
-    <CommonRegAttributes>$(VSSDK100Install)VisualStudioIntegration\Common\Source\CSharp\RegistrationAttributes</CommonRegAttributes>
+    <!--<CommonRegAttributes>$(VSSDK100Install)VisualStudioIntegration\Common\Source\CSharp\RegistrationAttributes</CommonRegAttributes>-->
   </PropertyGroup>
   <!-- This property group is only here to support building this project using the 
        MSBuild 3.5 toolset. In order to work correctly with this older toolset, it needs 
@@ -93,10 +93,10 @@
     <Reference Include="Microsoft.VisualStudio.Shell.Immutable.10.0, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="$(CommonRegAttributes)\CodeGeneratorRegistrationAttribute.cs">
+    <!--<Compile Include="$(CommonRegAttributes)\CodeGeneratorRegistrationAttribute.cs">
       <Link>SDK\CodeGeneratorRegistrationAttribute.cs</Link>
       <Visible>true</Visible>
-    </Compile>
+    </Compile>-->
     <Compile Include="JbstGenerator.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\AssemblyVersion.cs" />
