@@ -34,6 +34,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 
 using JsonFx.EcmaScript;
+using JsonFx.Markup;
 using JsonFx.Model;
 using JsonFx.Serialization;
 
@@ -54,11 +55,12 @@ namespace JsonFx.Jbst
 
 		public readonly string FilePath;
 
+		private readonly IDataTransformer<MarkupTokenType, ModelTokenType> Transformer;
 		private readonly EcmaScriptIdentifier DefaultNamespace;
 		private string jbstName;
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
-		private IDictionary<string, IEnumerable<Token<ModelTokenType>>> namedTemplates;
+		private IDictionary<string, IEnumerable<Token<MarkupTokenType>>> namedTemplates;
 
 		#endregion Fields
 
@@ -68,8 +70,9 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="filePath"></param>
-		public CompilationState(string filePath, EcmaScriptIdentifier defaultNamespace)
+		public CompilationState(IDataTransformer<MarkupTokenType, ModelTokenType> transformer, string filePath, EcmaScriptIdentifier defaultNamespace)
 		{
+			this.Transformer = transformer;
 			this.DefaultNamespace = defaultNamespace ?? String.Empty;
 			this.FilePath = filePath ?? String.Empty;
 		}
@@ -115,31 +118,10 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		public IEnumerable<Token<ModelTokenType>> Content
+		public IEnumerable<Token<MarkupTokenType>> Content
 		{
 			get;
 			set;
-		}
-
-		public IEnumerable<Token<ModelTokenType>> this[string name]
-		{
-			get
-			{
-				if (this.namedTemplates == null)
-				{
-					return null;
-				}
-
-				return this.namedTemplates[name];
-			}
-			set
-			{
-				if (this.namedTemplates == null)
-				{
-					this.namedTemplates = new Dictionary<string, IEnumerable<Token<ModelTokenType>>>(StringComparer.OrdinalIgnoreCase);
-				}
-				this.namedTemplates[name] = value;
-			}
 		}
 
 		public AutoMarkupType AutoMarkup
@@ -174,7 +156,7 @@ namespace JsonFx.Jbst
 			}
 			else
 			{
-				formatter.Format(this.Content, writer);
+				this.FormatContent(formatter, writer);
 			}
 
 			writer.WriteLine(");");
@@ -187,13 +169,51 @@ namespace JsonFx.Jbst
 			}
 		}
 
+		public void FormatContent(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
+		{
+			var output = this.Transformer.Transform(this.Content);
+
+			formatter.Format(output, writer);
+		}
+
 		#endregion JbstCommand Members
 
-		#region Methods
+		#region Named Template Methods
 
-		public IEnumerable<Token<ModelTokenType>> GetNamedTemplates()
+		public void AddNamedTemplate(string name, IEnumerable<Token<MarkupTokenType>> content)
+		{
+			if (name == null)
+			{
+				name = String.Empty;
+			}
+
+			if (this.namedTemplates == null)
+			{
+				this.namedTemplates = new Dictionary<string, IEnumerable<Token<MarkupTokenType>>>(StringComparer.OrdinalIgnoreCase);
+			}
+
+			this.namedTemplates[name] = content;
+		}
+
+		public void FormatNamedTemplates(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
+		{
+			formatter.Format(this.TransformNamedTemplates(), writer);
+		}
+
+		private IEnumerable<Token<ModelTokenType>> TransformNamedTemplates()
 		{
 			yield return new Token<ModelTokenType>(ModelTokenType.ObjectBegin);
+
+			if (this.Content != null)
+			{
+				yield return new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix));
+
+				var output = this.Transformer.Transform(this.Content);
+				foreach (var token in output)
+				{
+					yield return token;
+				}
+			}
 
 			if (this.namedTemplates != null)
 			{
@@ -203,7 +223,8 @@ namespace JsonFx.Jbst
 
 					if (template.Value != null)
 					{
-						foreach (var token in template.Value)
+						var output = this.Transformer.Transform(template.Value);
+						foreach (var token in output)
 						{
 							yield return token;
 						}
@@ -214,7 +235,7 @@ namespace JsonFx.Jbst
 			yield return new Token<ModelTokenType>(ModelTokenType.ObjectEnd);
 		}
 
-		#endregion Methods
+		#endregion Named Template Methods
 
 		#region Utility Methods
 

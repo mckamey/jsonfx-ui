@@ -233,7 +233,7 @@ namespace JsonFx.Jbst
 			}
 			else
 			{
-				formatter.Format(this.State.Content, writer);
+				this.State.FormatContent(formatter, writer);
 			}
 
 			writer.Write(
@@ -298,12 +298,7 @@ namespace JsonFx.Jbst
 			}
 			else
 			{
-				if (this.State.Content != null)
-				{
-					this.State[String.Empty] = this.State.Content;
-				}
-
-				formatter.Format(this.State.GetNamedTemplates(), writer);
+				this.State.FormatNamedTemplates(formatter, writer);
 			}
 
 			writer.Write(JbstWrapperTemplate.WrapperEnd);

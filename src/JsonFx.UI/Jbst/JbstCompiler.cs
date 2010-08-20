@@ -37,6 +37,7 @@ using JsonFx.Html;
 using JsonFx.IO;
 using JsonFx.JsonML;
 using JsonFx.Markup;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
@@ -58,6 +59,7 @@ namespace JsonFx.Jbst
 
 		private readonly EcmaScriptIdentifier DefaultNamespace;
 		private readonly DataWriterSettings Settings = new DataWriterSettings { PrettyPrint=true };
+		private readonly IDataTransformer<MarkupTokenType, ModelTokenType> Transformer = new JsonMLReader.JsonMLInTransformer { Whitespace = WhitespaceType.Normalize };
 
 		#endregion Fields
 
@@ -170,7 +172,7 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		private CompilationState ProcessTemplate(string path, IStream<Token<MarkupTokenType>> stream)
 		{
-			CompilationState state = new CompilationState(path, this.DefaultNamespace);
+			CompilationState state = new CompilationState(this.Transformer, path, this.DefaultNamespace);
 			int rootCount = 0,
 				depth = 0;
 
@@ -278,7 +280,7 @@ namespace JsonFx.Jbst
 
 			if (output.Count > 0)
 			{
-				state.Content = new JsonMLReader.JsonMLInTransformer { Whitespace = WhitespaceType.Normalize }.Transform(output);
+				state.Content = output;
 			}
 			else
 			{
@@ -446,7 +448,7 @@ namespace JsonFx.Jbst
 				}
 				case JbstWrapperTemplate.InlineCommand:
 				{
-					state[(name as String) ?? String.Empty] = innerState.Content;
+					state.AddNamedTemplate(name as String, innerState.Content);
 					break;
 				}
 			}
