@@ -81,6 +81,7 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="About.cs" />
     <Compile Include="Jbst\AutoMarkupType.cs" />
     <Compile Include="Jbst\JbstCodeBlocks.cs" />
     <Compile Include="Jbst\Extensions\AppSettingsJbstExtension.cs" />
