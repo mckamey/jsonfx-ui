@@ -36,25 +36,12 @@ namespace JsonFx.UI
 	/// <summary>
 	/// JsonFx UI metadata
 	/// </summary>
-	public class About : JsonFx.About
+	public static class About
 	{
 		#region Fields
 
-		public static readonly About UI = new About(typeof(About).Assembly);
+		public static readonly JsonFx.About UI = new JsonFx.About(typeof(JsonFx.UI.About).Assembly);
 
 		#endregion Fields
-
-		#region Init
-
-		/// <summary>
-		/// Ctor
-		/// </summary>
-		/// <param name="assembly"></param>
-		public About(Assembly assembly)
-			: base(assembly)
-		{
-		}
-
-		#endregion Init
 	}
 }
