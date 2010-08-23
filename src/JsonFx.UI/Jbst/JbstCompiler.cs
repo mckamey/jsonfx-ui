@@ -552,7 +552,7 @@ namespace JsonFx.Jbst
 				default:
 				{
 					// unrecognized sequences get emitted as encoded text
-					return new Token<MarkupTokenType>(MarkupTokenType.Primitive, block.ToString());
+					return new Token<MarkupTokenType>(MarkupTokenType.Primitive, block);
 				}
 			}
 		}

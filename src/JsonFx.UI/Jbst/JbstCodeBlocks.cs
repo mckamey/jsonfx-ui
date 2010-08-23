@@ -34,6 +34,7 @@ using System.IO;
 using System.Text;
 
 using JsonFx.Jbst.Extensions;
+using JsonFx.Markup;
 using JsonFx.Model;
 using JsonFx.Serialization;
 
@@ -42,7 +43,9 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of JBST commands
 	/// </summary>
-	internal abstract class JbstCommand : ITextFormattable<ModelTokenType>
+	internal abstract class JbstCommand :
+		ITextFormattable<ModelTokenType>,
+		ITextFormattable<MarkupTokenType>
 	{
 		#region Constants
 
@@ -60,6 +63,16 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
+
+		#region ITextFormattable<MarkupTokenType> Members
+
+		public virtual void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
+		{
+			// emit an innocuous value
+			formatter.Format(new[] { new Token<MarkupTokenType>(MarkupTokenType.Primitive, new UnparsedBlock("!--", "--", this.GetType().FullName)) }, writer);
+		}
+
+		#endregion ITextFormattable<MarkupTokenType> Members
 	}
 
 	/// <summary>

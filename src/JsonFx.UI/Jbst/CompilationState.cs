@@ -132,7 +132,7 @@ namespace JsonFx.Jbst
 
 		#endregion Properties
 
-		#region JbstCommand Members
+		#region ITextFormattable<ModelTokenType> Members
 
 		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
@@ -176,7 +176,24 @@ namespace JsonFx.Jbst
 			formatter.Format(output, writer);
 		}
 
-		#endregion JbstCommand Members
+		#endregion ITextFormattable<ModelTokenType> Members
+
+		#region ITextFormattable<MarkupTokenType> Members
+
+		public override void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
+		{
+			if (this.Content == null)
+			{
+				base.Format(formatter, writer);
+			}
+			else
+			{
+				// TODO: determine what this would look like
+				formatter.Format(this.Content, writer);
+			}
+		}
+
+		#endregion ITextFormattable<MarkupTokenType> Members
 
 		#region Named Template Methods
 
