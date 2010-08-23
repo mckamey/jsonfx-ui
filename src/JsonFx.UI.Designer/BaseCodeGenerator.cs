@@ -32,7 +32,9 @@ using System;
 using System.CodeDom.Compiler;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Xml;
 
+using EnvDTE;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Designer.Interfaces;
 using Microsoft.VisualStudio.Shell;
@@ -142,6 +144,71 @@ namespace JsonFx.UI.Designer
 
 		#endregion Site Methods
 
+		#region Project Methods
+
+		protected IVsHierarchy GetProject()
+		{
+			DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));
+			Array projects = (Array)dte.ActiveSolutionProjects;
+
+			if (projects.Length > 0)
+			{
+				foreach (Project project in projects)
+				{
+					using (XmlReader reader = XmlReader.Create(project.FileName))
+					{
+						reader.MoveToContent();
+						object nodeName = reader.NameTable.Add("ProjectGuid");
+
+						while (reader.Read())
+						{
+							if (Object.Equals(reader.LocalName, nodeName))
+							{
+								string projectGuid = reader.ReadElementContentAsString();
+								if (!String.IsNullOrEmpty(projectGuid))
+								{
+									IServiceProvider serviceProvider = new ServiceProvider(project.DTE as VSOLE.IServiceProvider);
+									return VsShellUtilities.GetHierarchy(serviceProvider, new Guid(projectGuid));
+								}
+							}
+						}
+					}
+				}
+			}
+
+			return null;
+		}
+
+		protected ProjectItem GetProjectItem(string filename)
+		{
+			// obtain a reference to the current project as an IVsProject type
+			IVsProject project = this.GetProject() as IVsProject;
+
+			int iFound = 0;
+			uint itemID = 0;
+
+			// this locates and returns a handle to source file as a ProjectItem
+			project.IsDocumentInProject(filename, out iFound, new VSDOCUMENTPRIORITY[1], out itemID);
+
+			// if source file was found in the project
+			if (iFound != 0 && itemID != 0)
+			{
+				VSOLE.IServiceProvider oleSP;
+				project.GetItemContext(itemID, out oleSP);
+
+				if (oleSP != null)
+				{
+					ServiceProvider sp = new ServiceProvider(oleSP);
+					// convert our handle to a ProjectItem
+					return sp.GetService(typeof(EnvDTE.ProjectItem)) as EnvDTE.ProjectItem;
+				}
+			}
+
+			throw new ApplicationException("Unable to retrieve Visual Studio ProjectItem");
+		}
+
+		#endregion Project Methods
+
 		#region Reporting Methods
 
 		/// <summary>
@@ -212,7 +279,7 @@ namespace JsonFx.UI.Designer
 			{
 				extension = this.GetDefaultExtension();
 
-				return VSConstants.S_OK;
+				return String.IsNullOrEmpty(extension) ? VSConstants.E_FAIL : VSConstants.S_OK;
 			}
 			catch (Exception ex)
 			{

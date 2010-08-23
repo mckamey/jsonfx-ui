@@ -29,56 +29,70 @@
 #endregion License
 
 using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Text;
-
-using JsonFx.Jbst;
-using JsonFx.Serialization;
+using System.IO;
 
 namespace JsonFx.UI.Designer
 {
-	[ComVisible(true)]
-	[Guid("A4863538-A079-4713-9CE1-3563B751F565")]
-	public class JbstGenerator : MultipleFileGenerator
+	/// <summary>
+	/// Represents a file generator build result
+	/// </summary>
+	public sealed class FileGeneratorResult
 	{
-		#region Generator Methods
+		#region Fields
 
-		protected override IEnumerable<FileGeneratorResult> GenerateFiles(string inputFileName, string defaultNamespace, string inputFileContent)
+		private readonly string BasePath;
+		private readonly string BaseName;
+
+		#endregion Fields
+
+		#region Init
+
+		public FileGeneratorResult(string inputPath)
 		{
-			List<FileGeneratorResult> results = new List<FileGeneratorResult>();
-
-			// placeholder
-			results.Add(
-				new FileGeneratorResult(inputFileName)
-				{
-					Extension = ".jbst.cs",
-					Content = Encoding.UTF8.GetBytes("/* TODO */")
-				});
-
-			try
-			{
-				string outputContent = new JbstCompiler(defaultNamespace).Compile(inputFileName, inputFileContent);
-
-				results.Add(
-					new FileGeneratorResult(inputFileName)
-					{
-						Extension = ".jbst.js",
-						Content = Encoding.UTF8.GetBytes(outputContent)
-					});
-			}
-			catch (DeserializationException ex)
-			{
-				this.AddError(1, ex.Message, (uint)ex.Line, (uint)ex.Column);
-			}
-			catch (Exception ex)
-			{
-				this.AddError(1, ex.Message, 0, 0);
-			}
-
-			return results;
+			this.BasePath = Path.GetDirectoryName(inputPath)+Path.DirectorySeparatorChar;
+			this.BaseName = Path.GetFileNameWithoutExtension(inputPath);
 		}
 
-		#endregion Generator Methods
+		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// The file extension of the generated file
+		/// </summary>
+		public string Extension { get; set; }
+
+		/// <summary>
+		/// The file content of the generated file
+		/// </summary>
+		public byte[] Content { get; set; }
+
+		/// <summary>
+		/// Allows specifying a custom tool
+		/// </summary>
+		public string CustomTool { get; set; }
+
+		/// <summary>
+		/// Allows specifying a custom build action
+		/// </summary>
+		public int BuildAction { get; set; }
+
+		/// <summary>
+		/// Gets the resulting filename
+		/// </summary>
+		public string Name
+		{
+			get { return String.Concat(this.BaseName, this.Extension); }
+		}
+
+		/// <summary>
+		/// Gets the resulting path and filename
+		/// </summary>
+		public string FullName
+		{
+			get { return String.Concat(this.BasePath, this.BaseName, this.Extension); }
+		}
+
+		#endregion Properties
 	}
 }
