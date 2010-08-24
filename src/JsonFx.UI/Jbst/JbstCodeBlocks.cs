@@ -54,6 +54,15 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
+		#region Properties
+
+		public abstract JbstCommandType CommandType
+		{
+			get;
+		}
+
+		#endregion Properties
+
 		#region ITextFormattable<ModelTokenType> Members
 
 		public virtual void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
@@ -109,6 +118,14 @@ namespace JsonFx.Jbst
 		#endregion Init
 
 		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.DeclarationBlock; }
+		}
 
 		/// <summary>
 		/// Gets the name of the owning JBST
@@ -188,6 +205,14 @@ namespace JsonFx.Jbst
 		#region Properties
 
 		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.CodeBlock; }
+		}
+
+		/// <summary>
 		/// Gets the code block content
 		/// </summary>
 		public virtual string Code
@@ -209,6 +234,12 @@ namespace JsonFx.Jbst
 			{
 				writer.Write(this.Code);
 			}
+		}
+
+		public override void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
+		{
+			// emit an innocuous value
+			formatter.Format(new[] { new Token<MarkupTokenType>(MarkupTokenType.Primitive, new UnparsedBlock("!--", "--", this.GetType().FullName)) }, writer);
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
@@ -238,6 +269,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.CommentBlock; }
+		}
+
+		#endregion Properties
 
 		#region JbstCodeBlock Members
 
@@ -283,6 +326,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.ExpressionBlock; }
+		}
+
+		#endregion Properties
 
 		#region JbstCodeBlock Members
 
@@ -333,6 +388,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.StatementBlock; }
+		}
+
+		#endregion Properties
 
 		#region JbstCodeBlock Members
 
@@ -406,6 +473,14 @@ namespace JsonFx.Jbst
 		#region Properties
 
 		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.ExtensionBlock; }
+		}
+
+		/// <summary>
 		/// Gets the extension represented by this block
 		/// </summary>
 		public JbstExtension Extension
@@ -476,6 +551,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.UnparsedBlock; }
+		}
+
+		#endregion Properties
 
 		#region JbstCodeBlock Members
 

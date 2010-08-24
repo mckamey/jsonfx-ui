@@ -49,7 +49,7 @@ namespace JsonFx.Jbst
 
 		#endregion Constants
 
-		#region Foo Tests
+		#region Client-Side Tests
 
 		[Fact]
 		[Trait(TraitName, TraitValue)]
@@ -208,9 +208,10 @@ Foo.MyZebraList = JsonML.BST([
 	};
 }).call(Foo.MyZebraList);";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -300,9 +301,10 @@ return new Date().toString();
 this.myInitTime = this.generateValue();
 }).call(MyApp.MyJbstControl);";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -380,9 +382,10 @@ var NestedControls = JsonML.BST([
 ]);
 ";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -438,9 +441,10 @@ var WrapperControl = JsonML.BST([
 ]);
 ";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -502,9 +506,10 @@ var SwitcherControl = JsonML.BST([
 	};
 }).call(SwitcherControl);";
 
-			var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -519,7 +524,8 @@ var SwitcherControl = JsonML.BST([
 
 			var ex = Assert.Throws<TokenException<MarkupTokenType>>(delegate()
 			{
-				var actual = new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input);
+				string client, server;
+				new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input, out client, out server);
 			});
 
 			Assert.Equal(ex.Token, new Token<MarkupTokenType>(MarkupTokenType.Primitive, "bar"));
@@ -537,13 +543,116 @@ var SwitcherControl = JsonML.BST([
 
 			var ex = Assert.Throws<TokenException<MarkupTokenType>>(delegate()
 			{
-				var actual = new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input);
+				string client, server;
+				new JbstCompiler().Compile("~/Foo.UnsupportedArgs.jbst", input, out client, out server);
 			});
 
 			Assert.Equal(ex.Token, new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("data", "foo", null)));
 		}
 
-		#endregion Foo Tests
+		#endregion Client-Side Tests
+
+		#region Server-Side Tests
+
+		//[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_MyZebraListServer_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""Foo.MyZebraList"" Language=""JavaScript"" %>
+
+<script type=""text/javascript"">
+
+	/* private members ------------------------------------------ */
+
+	/*int*/ function digits(/*int*/ n) {
+		return (n < 10) ? '0' + n : n;
+	}
+
+	/* public members ------------------------------------------- */
+
+	// use the item index to alternate colors and highlight
+	/*string*/ this.zebraStripe = function(/*bool*/ selected, /*int*/ index, /*int*/ count) {
+		var css = [ ""item"" ];
+		if (index % 2 === 0) {
+			css.push(""item-alt"");
+		}
+		if (selected) {
+			css.push(""item-selected"");
+		}
+		return css.join("" "");
+	};
+
+	/*string*/ this.formatTime = function(/*Date*/ time) {
+		return time.getHours() + ':' + digits(time.getMinutes()) + ':' + digits(time.getSeconds());
+	};
+
+</script>
+
+<div class=""example"">
+	<h2><%= this.data.title %> as of <%= this.formatTime(this.data.timestamp) %>!</h2>
+	<p><%= this.data.description %></p>
+	<ul class=""items"" jbst:visible=""<%= this.data.children.length > 0 %>"">
+
+		<!-- anonymous inner template -->
+		<jbst:control data=""<%= this.data.children %>"">
+			<!-- populate list item for each item of the parent's children property -->
+			<li class=""<%= Foo.MyZebraList.zebraStripe(this.data.selected, this.index, this.count) %>"">
+				<%= this.data.label %> (<%= this.index+1 %> of <%= this.count %>)
+			</li>
+		</jbst:control>
+
+	</ul>
+</div>";
+
+			var expected =
+@"TODO";
+
+			StringWriter writer = new StringWriter();
+			new JbstCompiler().Compile("~/Foo.jbst", new StringReader(input), TextWriter.Null, writer);
+			var actual = writer.GetStringBuilder().ToString();
+
+			Assert.Equal(expected, actual);
+		}
+
+		//[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_MyJbstControlServer_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""MyApp.MyJbstControl"" Language=""JavaScript"" %>
+
+<script type=""text/javascript"">
+/* initialization code block, executed only once as control is loaded */
+this.generateValue = function() {
+return new Date().toString();
+};
+
+this.myInitTime = this.generateValue();
+</script>
+
+<%
+/* data binding code block, executed each time as control is data bound */
+this.myBindTime = this.generateValue();
+%>
+
+<%-- JBST Comment --%>
+<span style=""color:red""><%= this.myBindTime /* data binding expression */ %></span>
+<span style=""color:green""><%= this.myInitTime /* data binding expression */ %></span>
+
+<!-- HTML Comment -->
+<span style=""color:blue""><%$ Resources: localizationKey %><%-- JBST extension --%></span>";
+
+			var expected = @"TODO";
+
+			StringWriter writer = new StringWriter();
+			new JbstCompiler().Compile("~/Foo.jbst", new StringReader(input), TextWriter.Null, writer);
+			var actual = writer.GetStringBuilder().ToString();
+
+			Assert.Equal(expected, actual);
+		}
+
+		#endregion Server-Side Tests
 
 		#region Input Edge Case Tests
 
@@ -565,9 +674,10 @@ MyNamespace.Foo = JsonML.BST(null);
 
 			var input = "";
 
-			var actual = new JbstCompiler("MyNamespace").Compile("~/Foo.jbst", input);
+			string client, server;
+			new JbstCompiler("MyNamespace").Compile("~/Foo.jbst", input, out client, out server);
 
-			Assert.Equal(expected, actual);
+			Assert.Equal(expected, client);
 		}
 
 		[Fact]
@@ -582,7 +692,7 @@ var Foo = JsonML.BST(null);
 			var actual = new StringBuilder();
 			using (StringWriter writer = new StringWriter(actual))
 			{
-				new JbstCompiler().Compile("~/Foo.jbst", TextReader.Null, writer);
+				new JbstCompiler().Compile("~/Foo.jbst", TextReader.Null, writer, TextWriter.Null);
 			}
 
 			Assert.Equal(expected, actual.ToString());
@@ -597,7 +707,8 @@ var Foo = JsonML.BST(null);
 			ArgumentNullException ex = Assert.Throws<ArgumentNullException>(
 				delegate
 				{
-					var actual = new JbstCompiler().Compile("~/Foo.jbst", input);
+					string client, server;
+					new JbstCompiler().Compile("~/Foo.jbst", input, out client, out server);
 				});
 
 			// verify exception is coming from expected param
@@ -614,7 +725,7 @@ var Foo = JsonML.BST(null);
 			ArgumentNullException ex = Assert.Throws<ArgumentNullException>(
 				delegate
 				{
-					new JbstCompiler().Compile("~/Foo.jbst", input, output);
+					new JbstCompiler().Compile("~/Foo.jbst", input, output, output);
 				});
 
 			// verify exception is coming from expected param
@@ -623,19 +734,38 @@ var Foo = JsonML.BST(null);
 
 		[Fact]
 		[Trait(TraitName, TraitValue)]
-		public void Compile_NullOutputWriter_ThrowsArgumentNullException()
+		public void Compile_NullClientOutputWriter_ThrowsArgumentNullException()
 		{
 			var input = TextReader.Null;
-			var output = (TextWriter)null;
+			var clientOutput = (TextWriter)null;
+			var serverOutput = TextWriter.Null;
 
 			ArgumentNullException ex = Assert.Throws<ArgumentNullException>(
 				delegate
 				{
-					new JbstCompiler().Compile("~/Foo.jbst", input, output);
+					new JbstCompiler().Compile("~/Foo.jbst", input, clientOutput, serverOutput);
 				});
 
 			// verify exception is coming from expected param
-			Assert.Equal("output", ex.ParamName);
+			Assert.Equal("clientOutput", ex.ParamName);
+		}
+
+		[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_NullServerOutputWriter_ThrowsArgumentNullException()
+		{
+			var input = TextReader.Null;
+			var clientOutput = TextWriter.Null;
+			var serverOutput = (TextWriter)null;
+
+			ArgumentNullException ex = Assert.Throws<ArgumentNullException>(
+				delegate
+				{
+					new JbstCompiler().Compile("~/Foo.jbst", input, clientOutput, serverOutput);
+				});
+
+			// verify exception is coming from expected param
+			Assert.Equal("serverOutput", ex.ParamName);
 		}
 
 		#endregion Input Edge Case Tests

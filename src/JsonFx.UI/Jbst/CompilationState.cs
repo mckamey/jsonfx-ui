@@ -81,6 +81,14 @@ namespace JsonFx.Jbst
 
 		#region Properties
 
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.RootTemplate; }
+		}
+
 		public List<string> Imports
 		{
 			get

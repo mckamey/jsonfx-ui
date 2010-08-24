@@ -30,6 +30,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -46,39 +47,44 @@ namespace JsonFx.UI.Designer
 
 		protected override IEnumerable<FileGeneratorResult> GenerateFiles(string inputFileName, string defaultNamespace, string inputFileContent)
 		{
-			List<FileGeneratorResult> results = new List<FileGeneratorResult>();
-
 			try
 			{
-				string outputContent = new JbstCompiler(defaultNamespace).Compile(inputFileName, inputFileContent);
+				string virtualPath = this.GetVirtualPath(inputFileName);
 
-				results.Add(
+				var provider = this.GetCodeProvider();
+
+				string clientOutput, serverOutput, serverExt = provider.FileExtension;
+				new JbstCompiler(defaultNamespace, provider).Compile(virtualPath, inputFileContent, out clientOutput, out serverOutput);
+
+				return new[]
+				{
+					// emit client-side control
 					new FileGeneratorResult(inputFileName)
 					{
 						BuildAction = FileGeneratorResult.BuildActionType.EmbeddedResource,
 						Extension = ".jbst.js",
-						Content = Encoding.UTF8.GetBytes(outputContent)
-					});
+						Content = Encoding.UTF8.GetBytes(clientOutput)
+					},
+
+					// emit server-side control
+					new FileGeneratorResult(inputFileName)
+					{
+						BuildAction = FileGeneratorResult.BuildActionType.Compile,
+						Extension = ".jbst."+serverExt,
+						Content = Encoding.UTF8.GetBytes(serverOutput)
+					}
+				};
 			}
 			catch (DeserializationException ex)
 			{
 				this.AddError(1, ex.Message, (uint)ex.Line, (uint)ex.Column);
+				return null;
 			}
 			catch (Exception ex)
 			{
 				this.AddError(1, ex.Message, 0, 0);
+				return null;
 			}
-
-			// placeholder
-			results.Add(
-				new FileGeneratorResult(inputFileName)
-				{
-					BuildAction = FileGeneratorResult.BuildActionType.Compile,
-					Extension = ".jbst.cs",
-					Content = Encoding.UTF8.GetBytes("/* TODO. Generated from "+inputFileName+" at "+DateTime.Now.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ssK")+" */")
-				});
-
-			return results;
 		}
 
 		#endregion Generator Methods

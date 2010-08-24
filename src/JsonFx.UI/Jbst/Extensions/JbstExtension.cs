@@ -62,6 +62,14 @@ namespace JsonFx.Jbst.Extensions
 		#region Properties
 
 		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.ExtensionBlock; }
+		}
+
+		/// <summary>
 		/// Gets the extension content
 		/// </summary>
 		protected string Value

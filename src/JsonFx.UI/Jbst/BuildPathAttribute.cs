@@ -1,4 +1,4 @@
-#region License
+﻿#region License
 /*---------------------------------------------------------------------------------*\
 
 	Distributed under the terms of an MIT-style license:
@@ -29,57 +29,53 @@
 #endregion License
 
 using System;
-using System.Configuration;
-using System.IO;
 
-using JsonFx.Model;
-using JsonFx.Serialization;
-
-namespace JsonFx.Jbst.Extensions
+namespace JsonFx.Jbst
 {
-	internal class AppSettingsJbstExtension : JbstExtension
+	[AttributeUsage(AttributeTargets.Class, Inherited=false, AllowMultiple=false)]
+	public class BuildPathAttribute : Attribute
 	{
+		#region Fields
+
+		private readonly string VirtualPath;
+
+		#endregion Fields
+
 		#region Init
 
 		/// <summary>
 		/// Ctor
 		/// </summary>
-		/// <param name="value"></param>
-		/// <param name="path"></param>
-		protected internal AppSettingsJbstExtension(string value, string path)
-			: base(value, path)
+		public BuildPathAttribute(string virtualPath)
 		{
+			this.VirtualPath = virtualPath;
 		}
 
 		#endregion Init
 
-		#region Properties
+		#region Methods
 
 		/// <summary>
-		/// Gets the command type
+		/// Gets the corresponding virtual path for the source of the given generated type.
 		/// </summary>
-		public override JbstCommandType CommandType
+		/// <param name="type">the Type marked with VirtualPathAttribute</param>
+		/// <returns>virtual path of the source</returns>
+		public static string GetVirtualPath(Type type)
 		{
-			get { return JbstCommandType.AppSettingsExtension; }
-		}
-
-		#endregion Properties
-
-		#region JbstExtension Members
-
-		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
-		{
-			string appSettingsKey = this.Value.Trim();
-
-			if (String.IsNullOrEmpty(appSettingsKey))
+			if (type == null)
 			{
-				base.Format(formatter, writer);
-				return;
+				return null;
 			}
 
-			formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
+			BuildPathAttribute attrib = Attribute.GetCustomAttribute(type, typeof(BuildPathAttribute), false) as BuildPathAttribute;
+			if (attrib == null)
+			{
+				return null;
+			}
+
+			return attrib.VirtualPath;
 		}
 
-		#endregion JbstExtension Members
+		#endregion Methods
 	}
 }

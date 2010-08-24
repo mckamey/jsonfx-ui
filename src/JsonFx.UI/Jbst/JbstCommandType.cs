@@ -1,4 +1,4 @@
-#region License
+﻿#region License
 /*---------------------------------------------------------------------------------*\
 
 	Distributed under the terms of an MIT-style license:
@@ -29,57 +29,31 @@
 #endregion License
 
 using System;
-using System.Configuration;
-using System.IO;
 
-using JsonFx.Model;
-using JsonFx.Serialization;
-
-namespace JsonFx.Jbst.Extensions
+namespace JsonFx.Jbst
 {
-	internal class AppSettingsJbstExtension : JbstExtension
+	/// <summary>
+	/// Enables fast inspection of command type
+	/// </summary>
+	internal enum JbstCommandType
 	{
-		#region Init
+		None,
 
-		/// <summary>
-		/// Ctor
-		/// </summary>
-		/// <param name="value"></param>
-		/// <param name="path"></param>
-		protected internal AppSettingsJbstExtension(string value, string path)
-			: base(value, path)
-		{
-		}
+		UnparsedBlock,
 
-		#endregion Init
+		DeclarationBlock,
+		CodeBlock,
+		CommentBlock,
+		ExpressionBlock,
+		StatementBlock,
+		ExtensionBlock,
+		AppSettingsExtension,
+		ResourceExtension,
 
-		#region Properties
-
-		/// <summary>
-		/// Gets the command type
-		/// </summary>
-		public override JbstCommandType CommandType
-		{
-			get { return JbstCommandType.AppSettingsExtension; }
-		}
-
-		#endregion Properties
-
-		#region JbstExtension Members
-
-		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
-		{
-			string appSettingsKey = this.Value.Trim();
-
-			if (String.IsNullOrEmpty(appSettingsKey))
-			{
-				base.Format(formatter, writer);
-				return;
-			}
-
-			formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
-		}
-
-		#endregion JbstExtension Members
+		RootTemplate,
+		TemplateReference,
+		InlineTemplate,
+		WrapperTemplate,
+		Placeholder
 	}
 }

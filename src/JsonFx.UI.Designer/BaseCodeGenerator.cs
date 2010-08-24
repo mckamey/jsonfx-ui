@@ -145,6 +145,28 @@ namespace JsonFx.UI.Designer
 
 		#region Project Methods
 
+		protected string GetVirtualPath(string inputFilePath)
+		{
+			DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));
+			Array projects = (Array)dte.ActiveSolutionProjects;
+
+			foreach (Project project in projects)
+			{
+				string projectPath = project.Properties.Item("FullPath").Value as string ?? "";
+
+				string[] inputParts = inputFilePath.Split(new[] { System.IO.Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+				string[] projectFolders = projectPath.Split(new[] { System.IO.Path.DirectorySeparatorChar }, StringSplitOptions.RemoveEmptyEntries);
+
+				int count = inputParts.Length - projectFolders.Length;
+				if (count > 0)
+				{
+					return "~/"+String.Join("/", inputParts, projectFolders.Length, count);
+				}
+			}
+
+			return inputFilePath;
+		}
+
 		protected IVsHierarchy GetProject()
 		{
 			DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));

@@ -1,4 +1,4 @@
-#region License
+﻿#region License
 /*---------------------------------------------------------------------------------*\
 
 	Distributed under the terms of an MIT-style license:
@@ -29,57 +29,44 @@
 #endregion License
 
 using System;
-using System.Configuration;
 using System.IO;
 
-using JsonFx.Model;
-using JsonFx.Serialization;
-
-namespace JsonFx.Jbst.Extensions
+namespace JsonFx.Jbst
 {
-	internal class AppSettingsJbstExtension : JbstExtension
+	public abstract class JbstControl
 	{
-		#region Init
+		#region Delegates
 
-		/// <summary>
-		/// Ctor
-		/// </summary>
-		/// <param name="value"></param>
-		/// <param name="path"></param>
-		protected internal AppSettingsJbstExtension(string value, string path)
-			: base(value, path)
+		protected delegate void BindDelegate(TextWriter writer, object data, int index, int count);
+
+		#endregion Delegates
+
+		#region Constants
+
+		private static readonly object DefaultData = new object();
+		private const int DefaultIndex = 0;
+		private const int DefaultCount = 1;
+
+		#endregion Constants
+
+		#region Bind Methods
+
+		public void Bind(TextWriter writer)
+		{
+			this.Bind(writer, DefaultData, DefaultIndex, DefaultCount);
+		}
+
+		public void Bind(TextWriter writer, object data)
+		{
+			this.Bind(writer, data, DefaultIndex, DefaultCount);
+		}
+
+		public abstract void Bind(TextWriter writer, object data, int index, int count);
+
+		protected void BindInternal(BindDelegate binder, TextWriter writer, object data, int index, int count)
 		{
 		}
 
-		#endregion Init
-
-		#region Properties
-
-		/// <summary>
-		/// Gets the command type
-		/// </summary>
-		public override JbstCommandType CommandType
-		{
-			get { return JbstCommandType.AppSettingsExtension; }
-		}
-
-		#endregion Properties
-
-		#region JbstExtension Members
-
-		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
-		{
-			string appSettingsKey = this.Value.Trim();
-
-			if (String.IsNullOrEmpty(appSettingsKey))
-			{
-				base.Format(formatter, writer);
-				return;
-			}
-
-			formatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, ConfigurationManager.AppSettings[appSettingsKey]) });
-		}
-
-		#endregion JbstExtension Members
+		#endregion Bind Methods
 	}
 }

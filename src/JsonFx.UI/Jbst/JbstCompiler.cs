@@ -29,6 +29,7 @@
 #endregion License
 
 using System;
+using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
 
@@ -57,6 +58,7 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
+		private readonly CodeDomProvider Provider;
 		private readonly EcmaScriptIdentifier DefaultNamespace;
 		private readonly DataWriterSettings Settings = new DataWriterSettings { PrettyPrint=true };
 		private readonly IDataTransformer<MarkupTokenType, ModelTokenType> Transformer = new JsonMLReader.JsonMLInTransformer { Whitespace = WhitespaceType.Normalize };
@@ -69,16 +71,28 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		public JbstCompiler()
-			: this(null)
+			: this(null, null)
 		{
 		}
 
 		/// <summary>
 		/// Ctor
 		/// </summary>
+		/// <param name="defaultNamespace"></param>
 		public JbstCompiler(EcmaScriptIdentifier defaultNamespace)
+			: this(defaultNamespace, null)
+		{
+		}
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="defaultNamespace"></param>
+		/// <param name="provider"></param>
+		public JbstCompiler(EcmaScriptIdentifier defaultNamespace, CodeDomProvider provider)
 		{
 			this.DefaultNamespace = defaultNamespace;
+			this.Provider = provider ?? new Microsoft.CSharp.CSharpCodeProvider();
 		}
 
 		#endregion Init
@@ -88,9 +102,11 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Compiles the JBST template into executable JavaScript
 		/// </summary>
+		/// <param name="virtualPath"></param>
 		/// <param name="input"></param>
-		/// <returns></returns>
-		public string Compile(string path, string input)
+		/// <param name="clientOutput"></param>
+		/// <param name="serverOutput"></param>
+		public void Compile(string virtualPath, string input, out string clientOutput, out string serverOutput)
 		{
 			if (input == null)
 			{
@@ -101,53 +117,62 @@ namespace JsonFx.Jbst
 			var markup = this.GetTokenizer().GetTokens(input);
 
 			// translate to script
-			using (StringWriter writer = new StringWriter())
+			using (StringWriter clientWriter = new StringWriter())
+			using (StringWriter serverWriter = new StringWriter())
 			{
-				this.Compile(path, markup, writer);
+				this.Compile(virtualPath, markup, clientWriter, serverWriter);
 
-				return writer.GetStringBuilder().ToString();
+				clientOutput = clientWriter.GetStringBuilder().ToString();
+				serverOutput = serverWriter.GetStringBuilder().ToString();
 			}
 		}
 
 		/// <summary>
 		/// Compiles the JBST template into executable JavaScript
 		/// </summary>
+		/// <param name="virtualPath"></param>
 		/// <param name="input"></param>
-		/// <param name="output"></param>
-		public void Compile(string path, TextReader input, TextWriter output)
+		/// <param name="clientOutput"></param>
+		/// <param name="serverOutput"></param>
+		public void Compile(string virtualPath, TextReader input, TextWriter clientOutput, TextWriter serverOutput)
 		{
 			if (input == null)
 			{
 				throw new ArgumentNullException("input");
 			}
-
-			if (output == null)
+			if (clientOutput == null)
 			{
-				throw new ArgumentNullException("output");
+				throw new ArgumentNullException("clientOutput");
+			}
+			if (serverOutput == null)
+			{
+				throw new ArgumentNullException("serverOutput");
 			}
 
 			// parse the markup
 			var markup = this.GetTokenizer().GetTokens(input);
 
 			// translate to script
-			this.Compile(path, markup, output);
+			this.Compile(virtualPath, markup, clientOutput, serverOutput);
 		}
 
 		/// <summary>
 		/// Compiles the JBST template into executable JavaScript
 		/// </summary>
-		/// <param name="path"></param>
+		/// <param name="virtualPath"></param>
 		/// <param name="markup"></param>
-		/// <param name="output"></param>
-		private void Compile(string path, IEnumerable<Token<MarkupTokenType>> markup, TextWriter output)
+		/// <param name="clientOutput"></param>
+		private void Compile(string virtualPath, IEnumerable<Token<MarkupTokenType>> markup, TextWriter clientOutput, TextWriter serverOutput)
 		{
 			var stream = Stream<Token<MarkupTokenType>>.Create(markup, true);
 
 			// process markup converting code blocks and normalizing whitespace
-			CompilationState state = this.ProcessTemplate(path, stream);
+			CompilationState state = this.ProcessTemplate(virtualPath, stream);
 
 			// convert markup into JsonML object structure
-			state.Format(new EcmaScriptFormatter(this.Settings), output);
+			state.Format(new EcmaScriptFormatter(this.Settings), clientOutput);
+
+			new JbstControlBuilder(this.Settings, this.Provider).Build(state, serverOutput);
 		}
 
 		private HtmlTokenizer GetTokenizer()
@@ -170,9 +195,9 @@ namespace JsonFx.Jbst
 		/// <param name="state"></param>
 		/// <param name="markup"></param>
 		/// <returns></returns>
-		private CompilationState ProcessTemplate(string path, IStream<Token<MarkupTokenType>> stream)
+		private CompilationState ProcessTemplate(string virtualPath, IStream<Token<MarkupTokenType>> stream)
 		{
-			CompilationState state = new CompilationState(this.Transformer, path, this.DefaultNamespace);
+			CompilationState state = new CompilationState(this.Transformer, virtualPath, this.DefaultNamespace);
 			int rootCount = 0,
 				depth = 0;
 

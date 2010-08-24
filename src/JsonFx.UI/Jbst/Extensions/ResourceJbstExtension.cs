@@ -91,6 +91,14 @@ namespace JsonFx.Jbst.Extensions
 		#region Properties
 
 		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.ResourceExtension; }
+		}
+
+		/// <summary>
 		/// Gets the resource key for this expression
 		/// </summary>
 		public string GlobalizationKey

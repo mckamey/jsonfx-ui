@@ -64,7 +64,6 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
-		protected readonly CompilationState State;
 		private object nameExpr;
 		private object dataExpr;
 		private object indexExpr;
@@ -109,6 +108,12 @@ namespace JsonFx.Jbst
 		{
 			get { return (this.countExpr ?? JbstTemplateCall.DefaultCountExpression); }
 			set { this.countExpr = value; }
+		}
+
+		public CompilationState State
+		{
+			get;
+			private set;
 		}
 
 		#endregion Properties
@@ -175,6 +180,18 @@ namespace JsonFx.Jbst
 
 		#endregion Init
 
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.TemplateReference; }
+		}
+
+		#endregion Properties
+
 		#region JbstCommand Members
 
 		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
@@ -219,6 +236,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.InlineTemplate; }
+		}
+
+		#endregion Properties
 
 		#region JbstCommand Members
 
@@ -277,6 +306,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.WrapperTemplate; }
+		}
+
+		#endregion Properties
 
 		#region JbstCommand Members
 
@@ -345,6 +386,18 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Init
+
+		#region Properties
+
+		/// <summary>
+		/// Gets the command type
+		/// </summary>
+		public override JbstCommandType CommandType
+		{
+			get { return JbstCommandType.Placeholder; }
+		}
+
+		#endregion Properties
 
 		#region JbstCommand Members
 

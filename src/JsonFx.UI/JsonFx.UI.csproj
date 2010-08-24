@@ -74,15 +74,37 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\lib\JsonFx\$(OutputAssemblyLabel)\JsonFx.dll</HintPath>
     </Reference>
+    <!--<Reference Include="EcmaScript.NET.modified.dll">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\lib\Yahoo.Yui.Compressor\EcmaScript.NET.modified.dll</HintPath>
+    </Reference>-->
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
   </ItemGroup>
+  <!--<ItemGroup Condition=" '$(TargetFrameworkVersion)' == 'v2.0' Or '$(TargetFrameworkVersion)' == 'v3.0' ">
+    <Reference Include="Iesi.Collections.dll">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\lib\Yahoo.Yui.Compressor\Iesi.Collections.dll</HintPath>
+    </Reference>
+    <Reference Include="Yahoo.Yui.Compressor.NET20.dll">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\lib\Yahoo.Yui.Compressor\Yahoo.Yui.Compressor.NET20.dll</HintPath>
+    </Reference>
+  </ItemGroup>-->
   <ItemGroup Condition=" '$(TargetFrameworkVersion)' != 'v2.0' And '$(TargetFrameworkVersion)' != 'v3.0' ">
+    <!--<Reference Include="Yahoo.Yui.Compressor.dll">
+      <SpecificVersion>False</SpecificVersion>
+      <HintPath>..\..\lib\Yahoo.Yui.Compressor\Yahoo.Yui.Compressor.dll</HintPath>
+    </Reference>-->
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="About.cs" />
     <Compile Include="Jbst\AutoMarkupType.cs" />
+    <Compile Include="Jbst\BuildPathAttribute.cs" />
+    <Compile Include="Jbst\JbstCommandType.cs" />
+    <Compile Include="Jbst\JbstControl.cs" />
+    <Compile Include="Jbst\JbstControlBuilder.cs" />
     <Compile Include="Jbst\JbstCodeBlocks.cs" />
     <Compile Include="Jbst\Extensions\AppSettingsJbstExtension.cs" />
     <Compile Include="Jbst\Extensions\JbstExtension.cs" />
