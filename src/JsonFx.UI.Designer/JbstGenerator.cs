@@ -48,14 +48,6 @@ namespace JsonFx.UI.Designer
 		{
 			List<FileGeneratorResult> results = new List<FileGeneratorResult>();
 
-			// placeholder
-			results.Add(
-				new FileGeneratorResult(inputFileName)
-				{
-					Extension = ".jbst.cs",
-					Content = Encoding.UTF8.GetBytes("/* TODO */")
-				});
-
 			try
 			{
 				string outputContent = new JbstCompiler(defaultNamespace).Compile(inputFileName, inputFileContent);
@@ -63,6 +55,7 @@ namespace JsonFx.UI.Designer
 				results.Add(
 					new FileGeneratorResult(inputFileName)
 					{
+						BuildAction = FileGeneratorResult.BuildActionType.EmbeddedResource,
 						Extension = ".jbst.js",
 						Content = Encoding.UTF8.GetBytes(outputContent)
 					});
@@ -75,6 +68,15 @@ namespace JsonFx.UI.Designer
 			{
 				this.AddError(1, ex.Message, 0, 0);
 			}
+
+			// placeholder
+			results.Add(
+				new FileGeneratorResult(inputFileName)
+				{
+					BuildAction = FileGeneratorResult.BuildActionType.Compile,
+					Extension = ".jbst.cs",
+					Content = Encoding.UTF8.GetBytes("/* TODO. Generated from "+inputFileName+" at "+DateTime.Now.ToString("yyyy'-'MM'-'dd'T'HH':'mm':'ssK")+" */")
+				});
 
 			return results;
 		}

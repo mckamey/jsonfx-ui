@@ -32,7 +32,6 @@ using System;
 using System.CodeDom.Compiler;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Xml;
 
 using EnvDTE;
 using Microsoft.VisualStudio;
@@ -151,29 +150,14 @@ namespace JsonFx.UI.Designer
 			DTE dte = (DTE)Package.GetGlobalService(typeof(DTE));
 			Array projects = (Array)dte.ActiveSolutionProjects;
 
-			if (projects.Length > 0)
+			foreach (Project project in projects)
 			{
-				foreach (Project project in projects)
-				{
-					using (XmlReader reader = XmlReader.Create(project.FileName))
-					{
-						reader.MoveToContent();
-						object nodeName = reader.NameTable.Add("ProjectGuid");
+				string uniqueName = project.UniqueName;
+				IVsSolution solution = (IVsSolution)Package.GetGlobalService(typeof(SVsSolution));
 
-						while (reader.Read())
-						{
-							if (Object.Equals(reader.LocalName, nodeName))
-							{
-								string projectGuid = reader.ReadElementContentAsString();
-								if (!String.IsNullOrEmpty(projectGuid))
-								{
-									IServiceProvider serviceProvider = new ServiceProvider(project.DTE as VSOLE.IServiceProvider);
-									return VsShellUtilities.GetHierarchy(serviceProvider, new Guid(projectGuid));
-								}
-							}
-						}
-					}
-				}
+				IVsHierarchy hierarchy;
+				solution.GetProjectOfUniqueName(uniqueName, out hierarchy);
+				return hierarchy;
 			}
 
 			return null;

@@ -38,6 +38,14 @@ namespace JsonFx.UI.Designer
 	/// </summary>
 	public sealed class FileGeneratorResult
 	{
+		public enum BuildActionType : int
+		{
+			None = 0,
+			Compile = 1,
+			Content = 2,
+			EmbeddedResource = 3
+		}
+
 		#region Fields
 
 		private readonly string BasePath;
@@ -75,7 +83,7 @@ namespace JsonFx.UI.Designer
 		/// <summary>
 		/// Allows specifying a custom build action
 		/// </summary>
-		public int BuildAction { get; set; }
+		public BuildActionType BuildAction { get; set; }
 
 		/// <summary>
 		/// Gets the resulting filename
@@ -92,6 +100,8 @@ namespace JsonFx.UI.Designer
 		{
 			get { return String.Concat(this.BasePath, this.BaseName, this.Extension); }
 		}
+
+		internal bool Saved { get; set; }
 
 		#endregion Properties
 	}

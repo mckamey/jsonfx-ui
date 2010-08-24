@@ -78,48 +78,96 @@ namespace JsonFx.UI.Designer
 				new List<FileGeneratorResult>(generatedFiles);
 			ProjectItem item = this.GetProjectItem(inputFileName);
 
-			// remove any existing child items
-			foreach (ProjectItem child in item.ProjectItems)
+			if (results.Count < 1)
 			{
-				if (results.FindIndex(n => StringComparer.OrdinalIgnoreCase.Equals(n.Name, child.Name)) < 0)
+				// remove all
+				foreach (ProjectItem child in item.ProjectItems)
 				{
 					child.Delete();
 				}
-			}
 
-			// save and add all the new child items
-			for (int i=1; i<results.Count; i++)
-			{
-				var result = results[i];
-
-				string filename = result.FullName;
-				using (FileStream stream = File.Create(filename))
-				{
-					if (result.Content != null)
-					{
-						stream.Write(result.Content, 0, result.Content.Length);
-					}
-				}
-
-				ProjectItem child = item.ProjectItems.AddFromFile(filename);
-				if (!String.IsNullOrEmpty(result.CustomTool))
-				{
-					child.Properties.Item("CustomTool").Value = result.CustomTool;
-				}
-
-				if (result.BuildAction != 0)
-				{
-					child.Properties.Item("BuildAction").Value = result.BuildAction;
-				}
-			}
-
-			if (results.Count < 1)
-			{
 				return null;
 			}
 
-			this.extension = results[0].Extension;
-			return results[0].Content;
+			// find same last gen as VS will try to rename if we move these around
+			string lastGenName = item.Properties.Item("CustomToolOutput").Value as string;
+			int lastGenIndex = results.FindIndex(n => StringComparer.OrdinalIgnoreCase.Equals(n.Name, lastGenName));
+			if (lastGenIndex < 0)
+			{
+				lastGenIndex = 0;
+			}
+
+			foreach (ProjectItem child in item.ProjectItems)
+			{
+				int index = results.FindIndex(n => StringComparer.OrdinalIgnoreCase.Equals(n.Name, child.Name));
+				if (index < 0)
+				{
+					// remove extraneous child items
+					child.Delete();
+					continue;
+				}
+
+				var result = results[index];
+
+				if (index != lastGenIndex)
+				{
+					// the actual data for first will get saved by base
+					this.SaveFile(result);
+				}
+
+				this.SetItemProperties(result, child);
+				result.Saved = true;
+			}
+
+			// save and add new child items (skipping first)
+			for (int i=0; i<results.Count; i++)
+			{
+				if (i == lastGenIndex)
+				{
+					continue;
+				}
+
+				var result = results[i];
+				if (result.Saved)
+				{
+					continue;
+				}
+
+				this.SaveFile(result);
+				ProjectItem child = item.ProjectItems.AddFromFile(result.FullName);
+				this.SetItemProperties(result, child);
+			}
+
+			var genOutput = results[lastGenIndex];
+			this.extension = genOutput.Extension;
+			return genOutput.Content;
+		}
+
+		private void SaveFile(FileGeneratorResult result)
+		{
+			using (FileStream stream = File.Create(result.FullName))
+			{
+				if (result.Content != null)
+				{
+					stream.Write(result.Content, 0, result.Content.Length);
+				}
+			}
+		}
+
+		private void SetItemProperties(FileGeneratorResult result, ProjectItem child)
+		{
+			child.Name = result.Name;
+			//child.Properties.Item("IsCustomToolOutput").Value = true;
+
+			if (result.BuildAction != FileGeneratorResult.BuildActionType.None)
+			{
+				child.Properties.Item("BuildAction").Value = (int)result.BuildAction;
+			}
+
+			if (!String.IsNullOrEmpty(result.CustomTool))
+			{
+				child.Properties.Item("CustomTool").Value = result.CustomTool;
+			}
 		}
 
 		#endregion BaseCodeGenerator Methods
