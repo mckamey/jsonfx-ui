@@ -172,7 +172,19 @@ namespace JsonFx.Jbst
 			// convert markup into JsonML object structure
 			state.Format(new EcmaScriptFormatter(this.Settings), clientOutput);
 
-			new JbstControlBuilder(this.Settings, this.Provider).Build(state, serverOutput);
+			var code = new JbstControlBuilder(this.Settings).Build(state);
+
+			// emit control code
+			this.Provider.GenerateCodeFromCompileUnit(
+				code,
+				serverOutput,
+				new CodeGeneratorOptions
+				{
+					BlankLinesBetweenMembers = true,
+					BracingStyle = "C",
+					IndentString = "\t",
+					VerbatimOrder = true
+				});
 		}
 
 		private HtmlTokenizer GetTokenizer()

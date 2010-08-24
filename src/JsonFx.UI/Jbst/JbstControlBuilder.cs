@@ -30,10 +30,7 @@
 
 using System;
 using System.CodeDom;
-using System.CodeDom.Compiler;
-using System.Globalization;
 using System.IO;
-using System.Text;
 using System.Text.RegularExpressions;
 
 using JsonFx.Html;
@@ -57,7 +54,6 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
-		private readonly CodeDomProvider Provider;
 		private readonly HtmlFormatter Formatter;
 
 		#endregion Fields
@@ -68,10 +64,8 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="settings"></param>
-		public JbstControlBuilder(DataWriterSettings settings, CodeDomProvider provider)
+		public JbstControlBuilder(DataWriterSettings settings)
 		{
-			this.Provider = provider;
-
 			this.Formatter = new HtmlFormatter(settings)
 			{
 				CanonicalForm = false,
@@ -84,15 +78,11 @@ namespace JsonFx.Jbst
 
 		#region Build Methods
 
-		public void Build(CompilationState state, TextWriter writer)
+		public CodeCompileUnit Build(CompilationState state)
 		{
 			if (state == null)
 			{
 				throw new ArgumentNullException("state");
-			}
-			if (writer == null)
-			{
-				throw new ArgumentNullException("writer");
 			}
 
 			this.Formatter.ResetScopeChain();
@@ -123,11 +113,11 @@ namespace JsonFx.Jbst
 
 			#region [BuildPath(virtualPath)]
 
-			string virtualPath = JbstControlBuilder.QuoteSnippetStringCStyle(PathUtility.EnsureAppRelative(state.FilePath));
+			string virtualPath = PathUtility.EnsureAppRelative(state.FilePath);
 
 			CodeAttributeDeclaration attribute = new CodeAttributeDeclaration(
 				new CodeTypeReference(typeof(BuildPathAttribute)),
-				new CodeAttributeArgument(new CodeSnippetExpression(virtualPath)));
+				new CodeAttributeArgument(new CodePrimitiveExpression(virtualPath)));
 			controlType.CustomAttributes.Add(attribute);
 
 			#endregion [BuildPath(virtualPath)]
@@ -142,17 +132,7 @@ namespace JsonFx.Jbst
 
 			#endregion public override void Bind(TextWriter writer, object data, int index, int count)
 
-			// emit control code
-			this.Provider.GenerateCodeFromCompileUnit(
-				code,
-				writer,
-				new CodeGeneratorOptions
-				{
-					BlankLinesBetweenMembers = true,
-					BracingStyle = "C",
-					IndentString = "\t",
-					VerbatimOrder = true
-				});
+			return code;
 		}
 
 		private void BuildEntryPoint(string methodName, CodeTypeDeclaration controlType)
@@ -295,14 +275,12 @@ namespace JsonFx.Jbst
 				return;
 			}
 
-			string escaped = JbstControlBuilder.QuoteSnippetStringVerbatimStyle(markup);
-
 			#region writer.Write("escaped markup");
 
 			CodeExpression methodCall = new CodeMethodInvokeExpression(
 				new CodeArgumentReferenceExpression("writer"),
 				"Write",
-				new CodeSnippetExpression(escaped));
+				new CodePrimitiveExpression(markup));
 
 			#endregion writer.Write("escaped markup");
 
@@ -340,140 +318,6 @@ namespace JsonFx.Jbst
 
 			typeNS = fullName.Substring(0, split);
 			typeName = fullName.Substring(split+1);
-		}
-
-		/// <summary>
-		/// Escapes a C# string using C-style escape sequences.
-		/// </summary>
-		/// <param name="value"></param>
-		/// <returns></returns>
-		/// <remarks>
-		/// Adapted from Microsoft.CSharp.CSharpCodeGenerator.QuoteSnippetStringCStyle
-		/// Primary difference is does not wrap at 80 chars as large strings cause C# compiler to fail.
-		/// </remarks>
-		private static string QuoteSnippetStringCStyle(string value)
-		{
-			// CS1647: An expression is too long or complex to compile near '...'
-			// happens if line wraps too many times (335440 chars is max for x64, 926240 chars is max for x86)
-
-			// CS1034: Compiler limit exceeded: Line cannot exceed 16777214 characters
-			// theoretically every character could be escaped unicode (6 chars), plus quotes, etc.
-
-			const int LineWrapWidth = (16777214/6)-4;
-			StringBuilder buffer = new StringBuilder(value.Length+5);
-
-			buffer.Append("\"");
-			for (int i=0, length=value.Length; i<length; i++)
-			{
-				switch (value[i])
-				{
-					case '\u2028':
-					case '\u2029':
-					{
-						int ch = (int)value[i];
-						buffer.Append(@"\u");
-						buffer.Append(ch.ToString("X4", CultureInfo.InvariantCulture));
-						break;
-					}
-					case '\\':
-					{
-						buffer.Append(@"\\");
-						break;
-					}
-					case '\'':
-					{
-						buffer.Append(@"\'");
-						break;
-					}
-					case '\t':
-					{
-						buffer.Append(@"\t");
-						break;
-					}
-					case '\n':
-					{
-						buffer.Append(@"\n");
-						break;
-					}
-					case '\r':
-					{
-						buffer.Append(@"\r");
-						break;
-					}
-					case '"':
-					{
-						buffer.Append("\\\"");
-						break;
-					}
-					case '\0':
-					{
-						buffer.Append(@"\0");
-						break;
-					}
-					default:
-					{
-						buffer.Append(value[i]);
-						break;
-					}
-				}
-
-				if ((i > 0) && ((i % LineWrapWidth) == 0))
-				{
-					if ((Char.IsHighSurrogate(value[i]) && (i < (value.Length - 1))) && Char.IsLowSurrogate(value[i + 1]))
-					{
-						buffer.Append(value[++i]);
-					}
-					buffer.Append("\"+\r\n");
-					buffer.Append('"');
-				}
-			}
-			buffer.Append("\"");
-			return buffer.ToString();
-		}
-
-		/// <summary>
-		/// Escapes a C# string using C-style escape sequences.
-		/// </summary>
-		/// <param name="value"></param>
-		/// <returns></returns>
-		/// <remarks>
-		/// Adapted from Microsoft.CSharp.CSharpCodeGenerator.QuoteSnippetStringVerbatimStyle
-		/// Primary difference is does not wrap at 80 chars as large strings cause C# compiler to fail.
-		/// </remarks>
-		private static string QuoteSnippetStringVerbatimStyle(string value)
-		{
-			// CS1647: An expression is too long or complex to compile near '...'
-			// happens if line wraps too many times (335440 chars is max for x64, 926240 chars is max for x86)
-
-			// CS1034: Compiler limit exceeded: Line cannot exceed 16777214 characters
-			// theoretically every character could be escaped unicode (6 chars), plus quotes, etc.
-
-			const int LineWrapWidth = (16777214/6)-4;
-			StringBuilder buffer = new StringBuilder(value.Length+5);
-
-			buffer.AppendLine();
-			buffer.Append("@\"");
-			for (int i=0, length=value.Length; i<length; i++)
-			{
-				if (value[i] == '"')
-				{
-					buffer.Append('"');
-				}
-
-				buffer.Append(value[i]);
-
-				if ((i > 0) && ((i % LineWrapWidth) == 0))
-				{
-					if ((Char.IsHighSurrogate(value[i]) && (i < (value.Length - 1))) && Char.IsLowSurrogate(value[i + 1]))
-					{
-						buffer.Append(value[++i]);
-					}
-					buffer.AppendLine("\"+");
-					buffer.Append("@\"");
-				}
-			}
-			buffer.Append("\"");
-			return buffer.ToString();
 		}
 
 		#endregion Utility Methods
