@@ -47,7 +47,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Builds the server-side implementation of a given JBST
 	/// </summary>
-	internal class JbstControlBuilder
+	internal class JbstViewBuilder
 	{
 		#region Constants
 
@@ -69,7 +69,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="settings"></param>
-		public JbstControlBuilder(DataWriterSettings settings)
+		public JbstViewBuilder(DataWriterSettings settings)
 		{
 			this.HtmlFormatter = new HtmlFormatter(settings)
 			{
@@ -120,7 +120,7 @@ namespace JsonFx.Jbst
 			controlType.IsPartial = true;
 			controlType.Attributes = MemberAttributes.Public|MemberAttributes.Final;
 
-			controlType.BaseTypes.Add(typeof(JbstControl));
+			controlType.BaseTypes.Add(typeof(JbstView));
 			ns.Types.Add(controlType);
 
 			#endregion public sealed class JbstTypeName

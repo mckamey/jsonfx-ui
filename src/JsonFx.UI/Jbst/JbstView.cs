@@ -40,7 +40,7 @@ using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.
 
 namespace JsonFx.Jbst
 {
-	public abstract class JbstControl
+	public abstract class JbstView
 	{
 		#region Delegates
 
@@ -70,7 +70,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="settings"></param>
-		public JbstControl(DataWriterSettings settings)
+		public JbstView(DataWriterSettings settings)
 		{
 			this.Settings = settings;
 			this.Walker = new ModelWalker(settings);
@@ -122,7 +122,7 @@ namespace JsonFx.Jbst
 		/// <param name="count"></param>
 		protected void BindAdapter(BindDelegate binder, TextWriter writer, object data, int index, int count)
 		{
-			var sequence = (data ?? JbstControl.EmptySequence) as TokenSequence;
+			var sequence = (data ?? JbstView.EmptySequence) as TokenSequence;
 			if (sequence == null)
 			{
 				sequence = this.Walker.GetTokens(data);

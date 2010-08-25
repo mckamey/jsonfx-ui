@@ -157,7 +157,7 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Append another code block onto declaration block
 		/// </summary>
-		/// <param name="control"></param>
+		/// <param name="code"></param>
 		public void Append(string code)
 		{
 			this.Content.Append(code);

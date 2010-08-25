@@ -172,9 +172,9 @@ namespace JsonFx.Jbst
 			// convert markup into JsonML object structure
 			state.Format(new EcmaScriptFormatter(this.Settings), clientOutput);
 
-			var code = new JbstControlBuilder(this.Settings).Build(state);
+			var code = new JbstViewBuilder(this.Settings).Build(state);
 
-			// emit control code
+			// emit view code
 			this.Provider.GenerateCodeFromCompileUnit(
 				code,
 				serverOutput,
@@ -629,6 +629,7 @@ namespace JsonFx.Jbst
 			{
 				case "page":
 				case "control":
+				case "view":
 				{
 					this.ProcessTemplateDirective(state, stream);
 					return;

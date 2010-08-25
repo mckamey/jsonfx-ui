@@ -103,8 +103,6 @@
     <Compile Include="Jbst\AutoMarkupType.cs" />
     <Compile Include="Jbst\BuildPathAttribute.cs" />
     <Compile Include="Jbst\JbstCommandType.cs" />
-    <Compile Include="Jbst\JbstControl.cs" />
-    <Compile Include="Jbst\JbstControlBuilder.cs" />
     <Compile Include="Jbst\JbstCodeBlocks.cs" />
     <Compile Include="Jbst\Extensions\AppSettingsJbstExtension.cs" />
     <Compile Include="Jbst\Extensions\JbstExtension.cs" />
@@ -112,6 +110,8 @@
     <Compile Include="Jbst\JbstCompiler.cs" />
     <Compile Include="Jbst\CompilationState.cs" />
     <Compile Include="Jbst\JbstTemplates.cs" />
+    <Compile Include="Jbst\JbstView.cs" />
+    <Compile Include="Jbst\JbstViewBuilder.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Properties\AssemblyVersion.cs" />
     <Compile Include="Utils\PathUtility.cs" />

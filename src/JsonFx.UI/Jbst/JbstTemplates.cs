@@ -37,7 +37,7 @@ using JsonFx.Serialization;
 namespace JsonFx.Jbst
 {
 	/// <summary>
-	/// Internal representation of template/control commands
+	/// Internal representation of template commands
 	/// </summary>
 	internal abstract class JbstTemplateCall : JbstCommand
 	{
