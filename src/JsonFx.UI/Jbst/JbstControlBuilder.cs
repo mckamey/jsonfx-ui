@@ -40,6 +40,8 @@ using JsonFx.Model;
 using JsonFx.Serialization;
 using JsonFx.Utils;
 
+using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
+
 namespace JsonFx.Jbst
 {
 	/// <summary>
@@ -47,6 +49,12 @@ namespace JsonFx.Jbst
 	/// </summary>
 	internal class JbstControlBuilder
 	{
+		#region Constants
+
+		private static readonly object Key_VarCount = new object();
+
+		#endregion Constants
+
 		#region Fields
 
 		private readonly HtmlFormatter HtmlFormatter;
@@ -128,8 +136,20 @@ namespace JsonFx.Jbst
 
 			#endregion [BuildPath(virtualPath)]
 
+			#region Constructors
+
+			CodeConstructor ctor = new CodeConstructor();
+			ctor.Attributes = MemberAttributes.Public;
+			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(DataWriterSettings), "settings"));
+
+			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
+
+			controlType.Members.Add(ctor);
+
+			#endregion Constructors
+
 			// build control tree
-			string methodName = this.BuildTemplate(state, controlType, true);
+			string methodName = this.BuildTemplate(state, controlType);
 
 			#region public override void Bind(TextWriter writer, object data, int index, int count)
 
@@ -156,19 +176,19 @@ namespace JsonFx.Jbst
 
 			#endregion public override void Bind(TextWriter writer, object data, int index, int count)
 
-			#region this.BindInternal(this.methodName, writer, data, index, count);
+			#region this.BindAdapter(this.methodName, writer, data, index, count);
 
-			this.BuildBindInternalCall(methodName, method);
+			this.BuildBindAdapterCall(methodName, method);
 
-			#endregion this.BindInternal(this.methodName, writer, data, index, count);
+			#endregion this.BindAdapter(this.methodName, writer, data, index, count);
 
 			controlType.Members.Add(method);
 		}
 
-		private string BuildTemplate(CompilationState state, CodeTypeDeclaration controlType, bool isRoot)
+		private string BuildTemplate(CompilationState state, CodeTypeDeclaration controlType)
 		{
 			// each template gets built as a method as it can be called in a loop
-			string methodName = isRoot ? "Bind_Root" : String.Concat("Bind_", (++this.counter).ToString("000"));
+			string methodName = String.Concat("Bind_", (this.counter++).ToString("X4"));
 
 			#region private void methodName(TextWriter writer, object data, int index, int count)
 
@@ -177,7 +197,7 @@ namespace JsonFx.Jbst
 			method.Name = methodName;
 			method.Attributes = MemberAttributes.Private;
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TextWriter), "writer"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
+			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TokenSequence), "data"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
 
@@ -210,7 +230,7 @@ namespace JsonFx.Jbst
 				{
 					markup = this.HtmlFormatter.Format(stream.EndChunk());
 
-					this.BuildMarkup(markup, method);
+					this.EmitMarkup(markup, method);
 
 					this.BuildCommand(controlType, method, (JbstCommand)token.Value, false);
 
@@ -223,7 +243,7 @@ namespace JsonFx.Jbst
 			}
 
 			markup = this.HtmlFormatter.Format(stream.EndChunk());
-			this.BuildMarkup(markup, method);
+			this.EmitMarkup(markup, method);
 
 			controlType.Members.Add(method);
 
@@ -247,14 +267,14 @@ namespace JsonFx.Jbst
 				}
 				case JbstCommandType.InlineTemplate:
 				{
-					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, controlType, false);
-					this.BuildBindInternalCall(childMethod, method);
+					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, controlType);
+					this.BuildBindAdapterCall(childMethod, method);
 					return;
 				}
 				case JbstCommandType.CommentBlock:
 				{
 					JbstCommentBlock comment = (JbstCommentBlock)command;
-					this.BuildMarkup(
+					this.EmitMarkup(
 						String.Concat("<!--", comment.Code, "-->"),
 						method);
 					return;
@@ -295,7 +315,7 @@ namespace JsonFx.Jbst
 				#region new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
 
 				CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
-					new CodeObjectCreateExpression(name),
+					new CodeObjectCreateExpression(name, new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings")),
 					"Bind",
 					new CodeArgumentReferenceExpression("writer"),
 					this.EvaluateExpression(dataExpr),
@@ -314,48 +334,47 @@ namespace JsonFx.Jbst
 
 		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
-			string id = String.Concat("_", Guid.NewGuid().ToString("n"));
+			string varID = this.GenerateNewIDVar(method, "id");
 
-			string markup = String.Concat(
-				"<noscript id=\"",
-				id,
-				"\"></noscript><script type=\"text/javascript\">",
-				this.FormatExpression(nameExpr),
-				".replace(\"",
-				id,
-				"\",",
-				this.FormatExpression(dataExpr),
-				",",
-				this.FormatExpression(indexExpr),
-				",",
-				this.FormatExpression(countExpr),
-				");</script>");
+			this.EmitMarkup("<noscript id=\"", method);
+			this.EmitVarValue(varID, method);
+			this.EmitMarkup("\">", method);
 
-			this.BuildMarkup(markup, method);
+			this.EmitMarkup("</noscript><script type=\"text/javascript\">", method);
+			this.EmitMarkup(this.FormatExpression(nameExpr), method);
+			this.EmitMarkup(".replace(\"", method);
+			this.EmitVarValue(varID, method);
+			this.EmitMarkup("\",", method);
+			this.EmitMarkup(this.FormatExpression(dataExpr), method);
+			this.EmitMarkup(",", method);
+			this.EmitMarkup(this.FormatExpression(indexExpr), method);
+			this.EmitMarkup(",", method);
+			this.EmitMarkup(this.FormatExpression(countExpr), method);
+			this.EmitMarkup(");</script>", method);
 		}
 
 		private void BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
-			string id = String.Concat("_", Guid.NewGuid().ToString("n"));
+			string varID = this.GenerateNewIDVar(method, "id");
 
-			string markup = String.Concat(
-				"<div id=\"",
-				id,
-				"\">",
-				// TODO: inline content goes here
-				"</div><script type=\"text/javascript\">",
-				this.FormatExpression(nameExpr),
-				".replace(\"",
-				id,
-				"\",",
-				this.FormatExpression(dataExpr),
-				",",
-				this.FormatExpression(indexExpr),
-				",",
-				this.FormatExpression(countExpr),
-				");</script>");
+			this.EmitMarkup("<div id=\"", method);
+			this.EmitVarValue(varID, method);
+			this.EmitMarkup("\">", method);
 
-			this.BuildMarkup(markup, method);
+			// TODO: inline content goes here
+			this.EmitMarkup("[ inline content goes here ]", method);
+
+			this.EmitMarkup("</div><script type=\"text/javascript\">", method);
+			this.EmitMarkup(this.FormatExpression(nameExpr), method);
+			this.EmitMarkup(".replace(\"", method);
+			this.EmitVarValue(varID, method);
+			this.EmitMarkup("\",", method);
+			this.EmitMarkup(this.FormatExpression(dataExpr), method);
+			this.EmitMarkup(",", method);
+			this.EmitMarkup(this.FormatExpression(indexExpr), method);
+			this.EmitMarkup(",", method);
+			this.EmitMarkup(this.FormatExpression(countExpr), method);
+			this.EmitMarkup(");</script>", method);
 		}
 
 		private CodeExpression EvaluateExpression(object expr)
@@ -434,30 +453,53 @@ namespace JsonFx.Jbst
 				code = writer.GetStringBuilder().ToString();
 			}
 
-			this.BuildMarkup(
+			this.EmitMarkup(
 				String.Concat("<script type=\"text/javascript\">", Environment.NewLine, code, Environment.NewLine, "</script>"),
 				method);
 		}
 
-		private void BuildBindInternalCall(string methodName, CodeMemberMethod method)
+		private void BuildBindAdapterCall(string methodName, CodeMemberMethod method)
 		{
-			#region this.BindInternal(this.methodName, writer, data, index, count);
+			#region this.BindAdapter(this.methodName, writer, data, index, count);
 
 			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
-				"BindInternal",
+				"BindAdapter",
 				new CodeMethodReferenceExpression(new CodeThisReferenceExpression(), methodName),
 				new CodeArgumentReferenceExpression("writer"),
 				new CodeArgumentReferenceExpression("data"),
 				new CodeArgumentReferenceExpression("index"),
 				new CodeArgumentReferenceExpression("count"));
 
-			#endregion this.BindInternal(this.methodName, writer, data, index, count);
+			#endregion this.BindAdapter(this.methodName, writer, data, index, count);
 
 			method.Statements.Add(methodCall);
 		}
 
-		private void BuildMarkup(string markup, CodeMemberMethod method)
+		#endregion Build Methods
+
+		#region Methods
+
+		private void EmitVarValue(string varName, CodeMemberMethod method)
+		{
+			if (String.IsNullOrEmpty(varName))
+			{
+				return;
+			}
+
+			#region writer.Write(varName);
+
+			CodeExpression methodCall = new CodeMethodInvokeExpression(
+				new CodeArgumentReferenceExpression("writer"),
+				"Write",
+				new CodeVariableReferenceExpression(varName));
+
+			#endregion writer.Write(varName);
+
+			method.Statements.Add(methodCall);
+		}
+
+		private void EmitMarkup(string markup, CodeMemberMethod method)
 		{
 			if (String.IsNullOrEmpty(markup))
 			{
@@ -476,7 +518,40 @@ namespace JsonFx.Jbst
 			method.Statements.Add(methodCall);
 		}
 
-		#endregion Build Methods
+		private CodeVariableDeclarationStatement AllocateLocalVar<TVar>(CodeMemberMethod method, string prefix)
+		{
+			#region TVar prefix_X;
+
+			int varCount;
+			method.UserData[Key_VarCount] = varCount = method.UserData[Key_VarCount] is Int32 ? ((Int32)method.UserData[Key_VarCount])+1 : 0;
+			string locID = prefix+"_"+varCount.ToString("X");
+
+			var newLoc = new CodeVariableDeclarationStatement(typeof(TVar), locID);
+
+			method.Statements.Add(newLoc);
+
+			return newLoc;
+
+			#endregion TVar prefix_X;
+		}
+
+		private string GenerateNewIDVar(CodeMemberMethod method, string prefix)
+		{
+			#region string prefix_XXXX = String.Format("_{0:n}", Guid.NewGuid());
+
+			var newLoc = this.AllocateLocalVar<string>(method, prefix);
+
+			newLoc.InitExpression = new CodeMethodInvokeExpression(
+				new CodeTypeReferenceExpression(typeof(String)), "Format",
+				new CodePrimitiveExpression("_{0:n}"),
+				new CodeMethodInvokeExpression(new CodeTypeReferenceExpression(typeof(Guid)), "NewGuid"));
+
+			return newLoc.Name;
+
+			#endregion string prefix_XXXX = String.Format("_{0:n}", Guid.NewGuid());
+		}
+
+		#endregion Methods
 
 		#region Utility Methods
 
