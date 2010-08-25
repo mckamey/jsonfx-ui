@@ -47,7 +47,7 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
-		private static readonly Regex Regex_JbstName = new Regex("[^0-9a-zA-Z$_]+", RegexOptions.Compiled|RegexOptions.CultureInvariant|RegexOptions.ExplicitCapture);
+		private static readonly Regex Regex_JbstName = new Regex(@"[^0-9a-zA-Z$_\.]+", RegexOptions.Compiled|RegexOptions.CultureInvariant|RegexOptions.ExplicitCapture);
 
 		#endregion Constants
 
@@ -57,7 +57,6 @@ namespace JsonFx.Jbst
 
 		private readonly IDataTransformer<MarkupTokenType, ModelTokenType> Transformer;
 		private readonly EcmaScriptIdentifier DefaultNamespace;
-		private string jbstName;
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
 		private IDictionary<string, IEnumerable<Token<MarkupTokenType>>> namedTemplates;
@@ -103,15 +102,8 @@ namespace JsonFx.Jbst
 
 		public string JbstName
 		{
-			get
-			{
-				if (String.IsNullOrEmpty(this.jbstName))
-				{
-					this.jbstName = CompilationState.GenerateJbstName(this.FilePath, this.DefaultNamespace);
-				}
-				return this.jbstName;
-			}
-			set { this.jbstName = value; }
+			get;
+			set;
 		}
 
 		public JbstDeclarationBlock DeclarationBlock
@@ -144,6 +136,8 @@ namespace JsonFx.Jbst
 
 		public override void Format(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
 		{
+			this.EnsureName();
+
 			this.FormatGlobals(writer);
 
 			// emit namespace or variable
@@ -185,23 +179,6 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
-
-		#region ITextFormattable<MarkupTokenType> Members
-
-		public override void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
-		{
-			if (this.Content == null)
-			{
-				base.Format(formatter, writer);
-			}
-			else
-			{
-				// TODO: determine what this would look like
-				formatter.Format(this.Content, writer);
-			}
-		}
-
-		#endregion ITextFormattable<MarkupTokenType> Members
 
 		#region Named Template Methods
 
@@ -264,6 +241,16 @@ namespace JsonFx.Jbst
 
 		#region Utility Methods
 
+		public void EnsureName()
+		{
+			if (!String.IsNullOrEmpty(this.JbstName))
+			{
+				return;
+			}
+
+			this.JbstName = CompilationState.GenerateJbstName(this.FilePath, this.DefaultNamespace);
+		}
+
 		/// <summary>
 		/// Generates a globals list from import directives
 		/// </summary>
@@ -309,17 +296,7 @@ namespace JsonFx.Jbst
 			}
 			else
 			{
-				int start = filePath.LastIndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar })+1;
-				int end = filePath.IndexOf('.', start);
-				if (end > start)
-				{
-					filePath = filePath.Substring(start, end-start);
-				}
-				else
-				{
-					filePath = filePath.Substring(start);
-				}
-
+				filePath = Path.GetFileNameWithoutExtension(filePath);
 				filePath = Regex_JbstName.Replace(filePath, "_");
 			}
 

@@ -31,11 +31,12 @@
 using System;
 using System.CodeDom;
 using System.IO;
-using System.Text.RegularExpressions;
 
+using JsonFx.EcmaScript;
 using JsonFx.Html;
 using JsonFx.IO;
 using JsonFx.Markup;
+using JsonFx.Model;
 using JsonFx.Serialization;
 using JsonFx.Utils;
 
@@ -46,15 +47,11 @@ namespace JsonFx.Jbst
 	/// </summary>
 	internal class JbstControlBuilder
 	{
-		#region Constants
-
-		private static readonly Regex Regex_MethodName = new Regex("[^0-9a-zA-Z_]+", RegexOptions.Compiled|RegexOptions.CultureInvariant|RegexOptions.ExplicitCapture);
-
-		#endregion Constants
-
 		#region Fields
 
-		private readonly HtmlFormatter Formatter;
+		private readonly HtmlFormatter HtmlFormatter;
+		private readonly EcmaScriptFormatter JSFormatter;
+		private int counter;
 
 		#endregion Fields
 
@@ -66,11 +63,16 @@ namespace JsonFx.Jbst
 		/// <param name="settings"></param>
 		public JbstControlBuilder(DataWriterSettings settings)
 		{
-			this.Formatter = new HtmlFormatter(settings)
+			this.HtmlFormatter = new HtmlFormatter(settings)
 			{
 				CanonicalForm = false,
 				EncodeNonAscii = true,
 				EmptyAttributes = HtmlFormatter.EmptyAttributeType.Html
+			};
+
+			this.JSFormatter = new EcmaScriptFormatter(settings)
+			{
+				EncodeLessThan = true
 			};
 		}
 
@@ -85,11 +87,14 @@ namespace JsonFx.Jbst
 				throw new ArgumentNullException("state");
 			}
 
-			this.Formatter.ResetScopeChain();
+			this.counter = 0;
+			this.HtmlFormatter.ResetScopeChain();
 
 			CodeCompileUnit code = new CodeCompileUnit();
 
 			#region namespace JbstNamespace
+
+			state.EnsureName();
 
 			string typeNS, typeName;
 			this.SplitTypeName(state.JbstName, out typeNS, out typeName);
@@ -99,11 +104,12 @@ namespace JsonFx.Jbst
 
 			#endregion namespace JbstNamespace
 
-			#region public sealed class JbstTypeName
+			#region public partial class JbstTypeName
 
 			CodeTypeDeclaration controlType = new CodeTypeDeclaration();
 			controlType.IsClass = true;
 			controlType.Name = typeName;
+			controlType.IsPartial = true;
 			controlType.Attributes = MemberAttributes.Public|MemberAttributes.Final;
 
 			controlType.BaseTypes.Add(typeof(JbstControl));
@@ -123,7 +129,7 @@ namespace JsonFx.Jbst
 			#endregion [BuildPath(virtualPath)]
 
 			// build control tree
-			string methodName = this.BuildControl(state, controlType);
+			string methodName = this.BuildTemplate(state, controlType, true);
 
 			#region public override void Bind(TextWriter writer, object data, int index, int count)
 
@@ -159,10 +165,10 @@ namespace JsonFx.Jbst
 			controlType.Members.Add(method);
 		}
 
-		private string BuildControl(CompilationState state, CodeTypeDeclaration controlType)
+		private string BuildTemplate(CompilationState state, CodeTypeDeclaration controlType, bool isRoot)
 		{
-			// each control gets built as a method
-			string methodName = this.GetMethodName(state.JbstName);
+			// each template gets built as a method as it can be called in a loop
+			string methodName = isRoot ? "Bind_Root" : String.Concat("Bind_", (++this.counter).ToString("000"));
 
 			#region private void methodName(TextWriter writer, object data, int index, int count)
 
@@ -193,7 +199,7 @@ namespace JsonFx.Jbst
 					if (command != null)
 					{
 						// TODO: emit code reference
-						this.BuildCommand(controlType, method, command);
+						this.BuildCommand(controlType, method, command, true);
 					}
 					stream.Pop();
 					continue;
@@ -202,11 +208,11 @@ namespace JsonFx.Jbst
 				if (token.TokenType == MarkupTokenType.Primitive &&
 					token.Value is JbstCommand)
 				{
-					markup = this.Formatter.Format(stream.EndChunk());
+					markup = this.HtmlFormatter.Format(stream.EndChunk());
 
 					this.BuildMarkup(markup, method);
 
-					this.BuildCommand(controlType, method, (JbstCommand)token.Value);
+					this.BuildCommand(controlType, method, (JbstCommand)token.Value, false);
 
 					stream.Pop();
 					stream.BeginChunk();
@@ -216,7 +222,7 @@ namespace JsonFx.Jbst
 				stream.Pop();
 			}
 
-			markup = this.Formatter.Format(stream.EndChunk());
+			markup = this.HtmlFormatter.Format(stream.EndChunk());
 			this.BuildMarkup(markup, method);
 
 			controlType.Members.Add(method);
@@ -224,13 +230,24 @@ namespace JsonFx.Jbst
 			return methodName;
 		}
 
-		private void BuildCommand(CodeTypeDeclaration controlType, CodeMemberMethod method, JbstCommand command)
+		private void BuildCommand(CodeTypeDeclaration controlType, CodeMemberMethod method, JbstCommand command, bool isAttribute)
 		{
 			switch (command.CommandType)
 			{
+				case JbstCommandType.DeclarationBlock:
+				{
+					// nothing emitted on the server
+					return;
+				}
+				case JbstCommandType.TemplateReference:
+				{
+					JbstTemplateReference reference = (JbstTemplateReference)command;
+					this.BuildBindReferenceCall(reference.NameExpr, reference.DataExpr, reference.IndexExpr, reference.CountExpr, method);
+					return;
+				}
 				case JbstCommandType.InlineTemplate:
 				{
-					string childMethod = this.BuildControl(((JbstInlineTemplate)command).State, controlType);
+					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, controlType, false);
 					this.BuildBindInternalCall(childMethod, method);
 					return;
 				}
@@ -242,12 +259,184 @@ namespace JsonFx.Jbst
 						method);
 					return;
 				}
+				case JbstCommandType.ExpressionBlock:
+				case JbstCommandType.UnparsedBlock:
+				{
+					JbstCodeBlock codeBlock = (JbstCodeBlock)command;
+					if (!this.Transcode(codeBlock.Code, method))
+					{
+						this.BuildClientExecution(command, method);
+					}
+					return;
+				}
+				case JbstCommandType.StatementBlock:
+				{
+					JbstCodeBlock codeBlock = (JbstCodeBlock)command;
+					if (!this.Transcode(codeBlock.Code, method))
+					{
+						this.BuildClientExecution(command, method);
+					}
+					return;
+				}
 				default:
 				{
 					// TODO:
 					return;
 				}
 			}
+		}
+
+		private void BuildBindReferenceCall(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		{
+			try
+			{
+				string name = nameExpr as string;
+
+				#region new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
+
+				CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
+					new CodeObjectCreateExpression(name),
+					"Bind",
+					new CodeArgumentReferenceExpression("writer"),
+					this.EvaluateExpression(dataExpr),
+					this.EvaluateExpression(indexExpr),
+					this.EvaluateExpression(countExpr));
+
+				#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
+
+				method.Statements.Add(methodCall);
+			}
+			catch
+			{
+				this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr, method);
+			}
+		}
+
+		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		{
+			string id = String.Concat("_", Guid.NewGuid().ToString("n"));
+
+			string markup = String.Concat(
+				"<noscript id=\"",
+				id,
+				"\"></noscript><script type=\"text/javascript\">",
+				this.FormatExpression(nameExpr),
+				".replace(\"",
+				id,
+				"\",",
+				this.FormatExpression(dataExpr),
+				",",
+				this.FormatExpression(indexExpr),
+				",",
+				this.FormatExpression(countExpr),
+				");</script>");
+
+			this.BuildMarkup(markup, method);
+		}
+
+		private void BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		{
+			string id = String.Concat("_", Guid.NewGuid().ToString("n"));
+
+			string markup = String.Concat(
+				"<div id=\"",
+				id,
+				"\">",
+				// TODO: inline content goes here
+				"</div><script type=\"text/javascript\">",
+				this.FormatExpression(nameExpr),
+				".replace(\"",
+				id,
+				"\",",
+				this.FormatExpression(dataExpr),
+				",",
+				this.FormatExpression(indexExpr),
+				",",
+				this.FormatExpression(countExpr),
+				");</script>");
+
+			this.BuildMarkup(markup, method);
+		}
+
+		private CodeExpression EvaluateExpression(object expr)
+		{
+			if (expr == null)
+			{
+				return new CodePrimitiveExpression(null);
+			}
+
+			// TODO: convert expression to CodeDom or throw
+			switch (expr.ToString().Trim())
+			{
+				case "this.data":
+				{
+					return new CodeArgumentReferenceExpression("data");
+				}
+				case "this.index":
+				{
+					return new CodeArgumentReferenceExpression("index");
+				}
+				case "this.count":
+				{
+					return new CodeArgumentReferenceExpression("count");
+				}
+			}
+
+			throw new InvalidOperationException("Cannot translate expression");
+		}
+
+		private bool Transcode(string script, CodeMemberMethod method)
+		{
+			return false;
+		}
+
+		public string FormatExpression(object argument)
+		{
+			if (argument == null)
+			{
+				return null;
+			}
+
+			if (argument is string)
+			{
+				// directly use as inline expression
+				return ((string)argument).Trim();
+			}
+
+			if (argument is JbstExpressionBlock)
+			{
+				// convert to inline expression
+				return ((JbstExpressionBlock)argument).Code.Trim();
+			}
+
+			if (argument is JbstCommand)
+			{
+				using (StringWriter writer = new StringWriter())
+				{
+					// render code block as function
+					((JbstCommand)argument).Format(null, writer);
+
+					// convert to anonymous function call expression
+					return writer.GetStringBuilder().ToString().Trim();
+				}
+			}
+
+			// convert to token sequence and allow formatter to emit as primitive
+			return this.JSFormatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, argument) });
+		}
+
+		private void BuildClientExecution(JbstCommand command, CodeMemberMethod method)
+		{
+			string code;
+			using (var writer = new StringWriter())
+			{
+				command.Format(null, writer);
+				code = writer.GetStringBuilder().ToString();
+			}
+
+			this.BuildMarkup(
+				String.Concat("<script type=\"text/javascript\">", Environment.NewLine, code, Environment.NewLine, "</script>"),
+				method);
 		}
 
 		private void BuildBindInternalCall(string methodName, CodeMemberMethod method)
@@ -290,21 +479,6 @@ namespace JsonFx.Jbst
 		#endregion Build Methods
 
 		#region Utility Methods
-
-		private string GetMethodName(string name)
-		{
-			if (String.IsNullOrEmpty(name))
-			{
-				name = Guid.NewGuid().ToString("n");
-			}
-			else
-			{
-				name = Regex_MethodName.Replace(name, "_");
-			}
-
-			// TODO: check for name collisions
-			return "Bind_"+name;
-		}
 
 		private void SplitTypeName(string fullName, out string typeNS, out string typeName)
 		{

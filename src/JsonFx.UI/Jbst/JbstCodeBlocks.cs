@@ -43,9 +43,7 @@ namespace JsonFx.Jbst
 	/// <summary>
 	/// Internal representation of JBST commands
 	/// </summary>
-	internal abstract class JbstCommand :
-		ITextFormattable<ModelTokenType>,
-		ITextFormattable<MarkupTokenType>
+	internal abstract class JbstCommand : ITextFormattable<ModelTokenType>
 	{
 		#region Constants
 
@@ -72,16 +70,6 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
-
-		#region ITextFormattable<MarkupTokenType> Members
-
-		public virtual void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
-		{
-			// emit an innocuous value
-			formatter.Format(new[] { new Token<MarkupTokenType>(MarkupTokenType.Primitive, new UnparsedBlock("!--", "--", this.GetType().FullName)) }, writer);
-		}
-
-		#endregion ITextFormattable<MarkupTokenType> Members
 	}
 
 	/// <summary>
@@ -234,12 +222,6 @@ namespace JsonFx.Jbst
 			{
 				writer.Write(this.Code);
 			}
-		}
-
-		public override void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
-		{
-			// emit an innocuous value
-			formatter.Format(new[] { new Token<MarkupTokenType>(MarkupTokenType.Primitive, new UnparsedBlock("!--", "--", this.GetType().FullName)) }, writer);
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
