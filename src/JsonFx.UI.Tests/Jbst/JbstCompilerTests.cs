@@ -646,7 +646,44 @@ this.myBindTime = this.generateValue();
 			var expected = @"TODO";
 
 			StringWriter writer = new StringWriter();
-			new JbstCompiler().Compile("~/Foo.jbst", new StringReader(input), TextWriter.Null, writer);
+			new JbstCompiler("Blah").Compile("~/Foo.jbst", new StringReader(input), TextWriter.Null, writer);
+			var actual = writer.GetStringBuilder().ToString();
+
+			Assert.Equal(expected, actual);
+		}
+
+		//[Fact]
+		[Trait(TraitName, TraitValue)]
+		public void Compile_MyJbstControlServerVB_RendersJbst()
+		{
+			var input =
+@"<%@ Control Name=""MyApp.MyJbstControl"" Language=""JavaScript"" %>
+
+<script type=""text/javascript"">
+/* initialization code block, executed only once as control is loaded */
+this.generateValue = function() {
+return new Date().toString();
+};
+
+this.myInitTime = this.generateValue();
+</script>
+
+<%
+/* data binding code block, executed each time as control is data bound */
+this.myBindTime = this.generateValue();
+%>
+
+<%-- JBST Comment --%>
+<span style=""color:red""><%= this.myBindTime /* data binding expression */ %></span>
+<span style=""color:green""><%= this.myInitTime /* data binding expression */ %></span>
+
+<!-- HTML Comment -->
+<span style=""color:blue""><%$ Resources: localizationKey %><%-- JBST extension --%></span>";
+
+			var expected = @"TODO";
+
+			StringWriter writer = new StringWriter();
+			new JbstCompiler("Blah", new Microsoft.VisualBasic.VBCodeProvider()).Compile("~/Foo.jbst", new StringReader(input), TextWriter.Null, writer);
 			var actual = writer.GetStringBuilder().ToString();
 
 			Assert.Equal(expected, actual);
