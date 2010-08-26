@@ -289,7 +289,7 @@ namespace JsonFx.Jbst
 				case JbstCommandType.UnparsedBlock:
 				case JbstCommandType.StatementBlock:
 				{
-					CodeExpression expr = this.Translate(viewType, command, typeof(object));
+					CodeExpression expr = this.Translate<object>(viewType, command);
 					if (expr == null)
 					{
 						this.BuildClientExecution(command, method);
@@ -310,28 +310,64 @@ namespace JsonFx.Jbst
 
 		private void BuildBindReferenceCall(CodeTypeDeclaration viewType, object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
-			try
+			#region new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
+
+			CodeExpression nameCode;
+			if (nameExpr is string)
 			{
-				string name = nameExpr as string;
-
-				#region new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
-
-				CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
-					new CodeObjectCreateExpression(name, new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings")),
-					"Bind",
-					new CodeArgumentReferenceExpression("writer"),
-					this.Translate(viewType, dataExpr, typeof(object)),
-					this.Translate(viewType, indexExpr, typeof(int)),
-					this.Translate(viewType, countExpr, typeof(int)));
-
-				#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
-
-				method.Statements.Add(methodCall);
+				string name = (string)nameExpr;
+				if (EcmaScriptIdentifier.IsValidIdentifier(name, true))
+				{
+					nameCode = new CodeObjectCreateExpression(name, new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings"));
+				}
+				else
+				{
+					nameCode = this.Translate<object>(viewType, nameExpr);
+				}
 			}
-			catch
+			else
 			{
+				nameCode = this.Translate<object>(viewType, nameExpr);
+			}
+
+			CodeExpression dataCode = this.Translate<object>(viewType, dataExpr);
+			CodeExpression indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) : null;
+			CodeExpression countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) : null;
+
+			if (dataCode == null || indexCode == null || countCode == null)
+			{
+				// force into client mode
 				this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr, method);
+				return;
 			}
+
+			if (dataCode is CodeDefaultValueExpression)
+			{
+				// expression evaluated to an empty method so pass surrounding scope through
+				dataCode = new CodeArgumentReferenceExpression("data");
+			}
+			if (indexCode is CodeDefaultValueExpression)
+			{
+				// expression evaluated to an empty method so pass surrounding scope through
+				indexCode = new CodeArgumentReferenceExpression("index");
+			}
+			if (countCode is CodeDefaultValueExpression)
+			{
+				// expression evaluated to an empty method so pass surrounding scope through
+				countCode = new CodeArgumentReferenceExpression("count");
+			}
+
+			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
+				nameCode,
+				"Bind",
+				new CodeArgumentReferenceExpression("writer"),
+				dataCode,
+				indexCode,
+				countCode);
+
+			#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
+
+			method.Statements.Add(methodCall);
 		}
 
 		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
@@ -379,28 +415,44 @@ namespace JsonFx.Jbst
 			this.EmitMarkup(");</script>", method);
 		}
 
-		private CodeExpression Translate(CodeTypeDeclaration viewType, object expr, Type returnType)
+		private CodeExpression Translate<TResult>(CodeTypeDeclaration viewType, object expr)
 		{
 			string script = this.FormatExpression(expr);
 
-			CodeMemberMethod method = this.JSBuilder.Translate(script, String.Format(CodeBlockMethodFormat, this.counter), returnType);
-
+			CodeMemberMethod method = this.JSBuilder.Translate<TResult>(String.Format(CodeBlockMethodFormat, this.counter), script);
 			if (method == null)
 			{
+				// not yet supported
 				return null;
 			}
 
 			if (method.Statements.Count < 1)
 			{
-				// no method body
-				return new CodePrimitiveExpression(null);
+				// no method body, return default value of expected type
+				return new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
 			}
 
-			if (method.Statements.Count == 1 &&
-				method.Statements[0] is CodeMethodReturnStatement)
+			if (method.Statements.Count == 1)
 			{
-				// unwrap return expression
-				return ((CodeMethodReturnStatement)method.Statements[0]).Expression;
+				if (method.Statements[0] is CodeMethodReturnStatement)
+				{
+					// unwrap return expression
+					return ((CodeMethodReturnStatement)method.Statements[0]).Expression;
+				}
+
+				if (method.Statements[0] is CodeExpressionStatement)
+				{
+					// unwrap expression statement
+					return ((CodeExpressionStatement)method.Statements[0]).Expression;
+				}
+
+				if (method.Statements[0] is CodeSnippetStatement)
+				{
+					// unwrap snippet statement
+					return new CodeSnippetExpression(((CodeSnippetStatement)method.Statements[0]).Value);
+				}
+
+				// for now, others remain as a method
 			}
 
 			this.counter++;

@@ -67,16 +67,15 @@ namespace JsonFx.EcmaScript
 		#region Methods
 
 		/// <summary>
-		/// Converts
+		/// Translates script block to a CodeDom method
 		/// </summary>
-		/// <param name="script"></param>
 		/// <param name="methodName"></param>
+		/// <param name="script"></param>
 		/// <returns></returns>
-		public CodeMemberMethod Translate(string script, string methodName, Type returnType)
+		public CodeMemberMethod Translate<TResult>(string methodName, string script)
 		{
 			CodeMemberMethod method = new CodeMemberMethod();
 			method.Name = methodName;
-			method.ReturnType = new CodeTypeReference(returnType);
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TokenSequence), "data"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
@@ -105,29 +104,46 @@ namespace JsonFx.EcmaScript
 				return null;
 			}
 
-			if (block.Count < 1)
+			foreach (var node in block.Children)
 			{
-				// technically undefined
-				return method;
+				CodeExpression expr = this.ProcessNode(node);
+				if (expr == null)
+				{
+					// not yet supported
+					return null;
+				}
+
+				method.Statements.Add(expr);
 			}
 
-			if (block.Count > 1)
+			var index = method.Statements.Count-1;
+			if (index >= 0 &&
+				method.Statements[index] is CodeExpressionStatement)
 			{
-				// not yet supported
-				return method;
-			}
+				method.ReturnType = new CodeTypeReference(typeof(TResult));
 
-			Member memberNode = block[0] as Member;
-			if (memberNode == null)
-			{
-				// not yet supported
-				return null;
-			}
+				// TODO: wrap expression in a coercion call before return
 
-			CodeExpression expr = this.ProcessMember(memberNode);
-			method.Statements.Add(new CodeMethodReturnStatement(expr));
+				// convert expression statement to return statement
+				CodeExpressionStatement expr = (CodeExpressionStatement)method.Statements[index];
+				method.Statements[index] = new CodeMethodReturnStatement(expr.Expression);
+			}
 
 			return method;
+		}
+
+		private CodeExpression ProcessNode(AstNode node)
+		{
+			Member memberNode = node as Member;
+			if (memberNode != null)
+			{
+				return this.ProcessMember(memberNode);
+			}
+
+			// TODO: process other types
+
+			// not yet supported
+			return null;
 		}
 
 		private CodeExpression ProcessMember(Member memberNode)
@@ -149,23 +165,18 @@ namespace JsonFx.EcmaScript
 					}
 				}
 			}
-			else if (memberNode.Root is Member)
-			{
-				CodeExpression root = this.ProcessMember((Member)memberNode.Root);
-				if (root == null)
-				{
-					return null;
-				}
 
-				return new CodeMethodInvokeExpression(
-					new CodeTypeReferenceExpression(typeof(ModelSubsequencer)),
-					"Property",
-					root,
-					new CodeObjectCreateExpression(typeof(DataName), new CodePrimitiveExpression(memberNode.Name)));
+			CodeExpression root = this.ProcessNode(memberNode.Root);
+			if (root == null)
+			{
+				return null;
 			}
 
-			// not yet supported
-			return null;
+			return new CodeMethodInvokeExpression(
+				new CodeTypeReferenceExpression(typeof(ModelSubsequencer)),
+				"Property",
+				root,
+				new CodeObjectCreateExpression(typeof(DataName), new CodePrimitiveExpression(memberNode.Name)));
 		}
 
 		private void OnCompilerError(object sender, JScriptExceptionEventArgs e)
