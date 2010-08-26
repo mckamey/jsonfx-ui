@@ -94,10 +94,13 @@ namespace JsonFx.EcmaScript
 			{
 				block = parser.Parse(this.CodeSettings);
 			}
+#if DEBUG
 			catch (Exception ex)
 			{
-#if DEBUG
 				Trace.WriteLine(ex.Message);
+#else
+			catch
+			{
 #endif
 				return null;
 			}
