@@ -40,6 +40,7 @@ using JsonFx.JsonML;
 using JsonFx.Markup;
 using JsonFx.Model;
 using JsonFx.Serialization;
+using JsonFx.Utils;
 
 namespace JsonFx.Jbst
 {
@@ -276,7 +277,7 @@ namespace JsonFx.Jbst
 						}
 						else if (token.Value != null)
 						{
-							if ((depth == 0) && (!(token.Value is string) || !IsNullOrWhiteSpace(token.ValueAsString())))
+							if ((depth == 0) && (!(token.Value is string) || !CharUtility.IsNullOrWhiteSpace(token.ValueAsString())))
 							{
 								rootCount++;
 							}
@@ -749,7 +750,7 @@ namespace JsonFx.Jbst
 			{
 				var root = (last >= 0) ? (result[trailing ? last : 0]) : null;
 				if (root.TokenType != MarkupTokenType.Primitive ||
-					!IsNullOrWhiteSpace(root.ValueAsString()))
+					!CharUtility.IsNullOrWhiteSpace(root.ValueAsString()))
 				{
 					if (trailing)
 					{
@@ -770,47 +771,5 @@ namespace JsonFx.Jbst
 		}
 
 		#endregion Processing Methods
-
-		#region Utility Methods
-
-		/// <summary>
-		/// Checks if string is null, empty or entirely made up of whitespace
-		/// </summary>
-		/// <param name="value"></param>
-		/// <returns></returns>
-		/// <remarks>
-		/// Essentially the same as String.IsNullOrWhiteSpace from .NET 4.0
-		/// with a simpler view of whitespace.
-		/// </remarks>
-		private static bool IsNullOrWhiteSpace(string value)
-		{
-			if (value != null)
-			{
-				for (int i=0, length=value.Length; i<length; i++)
-				{
-					if (!IsWhiteSpace(value[i]))
-					{
-						return false;
-					}
-				}
-			}
-			return true;
-		}
-
-		/// <summary>
-		/// Checks if character is line ending, tab or space
-		/// </summary>
-		/// <param name="ch"></param>
-		/// <returns></returns>
-		private static bool IsWhiteSpace(char ch)
-		{
-			return
-				(ch == ' ') |
-				(ch == '\n') ||
-				(ch == '\r') ||
-				(ch == '\t');
-		}
-
-		#endregion Utility Methods
 	}
 }
