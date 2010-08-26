@@ -30,6 +30,7 @@
 
 using System;
 using System.CodeDom;
+using System.Diagnostics;
 
 using JsonFx.Model;
 using JsonFx.Serialization;
@@ -95,6 +96,9 @@ namespace JsonFx.EcmaScript
 			}
 			catch (Exception ex)
 			{
+#if DEBUG
+				Trace.WriteLine(ex.Message);
+#endif
 				return null;
 			}
 
