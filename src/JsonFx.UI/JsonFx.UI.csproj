@@ -74,10 +74,10 @@
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\lib\JsonFx\$(OutputAssemblyLabel)\JsonFx.dll</HintPath>
     </Reference>
-    <!--<Reference Include="AjaxMin.dll">
+    <Reference Include="AjaxMin.dll">
       <SpecificVersion>False</SpecificVersion>
       <HintPath>..\..\lib\AjaxMinifier\AjaxMin.dll</HintPath>
-    </Reference>-->
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
   </ItemGroup>
@@ -86,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="About.cs" />
+    <Compile Include="EcmaScript\EcmaScriptBuilder.cs" />
     <Compile Include="Jbst\AutoMarkupType.cs" />
     <Compile Include="Jbst\BuildPathAttribute.cs" />
     <Compile Include="Jbst\JbstCommandType.cs" />

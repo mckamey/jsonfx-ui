@@ -61,6 +61,7 @@ namespace JsonFx.Jbst
 
 		protected readonly DataWriterSettings Settings;
 		private readonly ModelWalker Walker;
+		private readonly ModelAnalyzer Analyzer;
 
 		#endregion Fields
 
@@ -74,6 +75,7 @@ namespace JsonFx.Jbst
 		{
 			this.Settings = settings;
 			this.Walker = new ModelWalker(settings);
+			this.Analyzer = new ModelAnalyzer(new DataReaderSettings(settings.Resolver, settings.Filters));
 		}
 
 		#endregion Init
@@ -142,6 +144,25 @@ namespace JsonFx.Jbst
 			{
 				binder(writer, item, index++, count);
 			}
+		}
+
+		protected void WriteAdapter(TextWriter writer, object value)
+		{
+			// TODO: add type coercion?
+
+			if (value is TokenSequence)
+			{
+				// FirstOrDefault()
+				foreach (var result in this.Analyzer.Analyze((TokenSequence)value))
+				{
+					writer.Write(result);
+					return;
+				}
+
+				return;
+			}
+
+			writer.Write(value);
 		}
 
 		#endregion Internal Methods

@@ -30,6 +30,7 @@
 
 using System;
 using System.CodeDom;
+using System.Collections.Generic;
 using System.IO;
 
 using JsonFx.EcmaScript;
@@ -51,6 +52,9 @@ namespace JsonFx.Jbst
 	{
 		#region Constants
 
+		private const string TemplateMethodFormat = "T_{0:x4}";
+		private const string CodeBlockMethodFormat = "B_{0:x4}";
+		private const string LocalVarFormat = "{0}_{1:x}";
 		private static readonly object Key_VarCount = new object();
 
 		#endregion Constants
@@ -59,6 +63,8 @@ namespace JsonFx.Jbst
 
 		private readonly HtmlFormatter HtmlFormatter;
 		private readonly EcmaScriptFormatter JSFormatter;
+		private readonly EcmaScriptBuilder JSBuilder = new EcmaScriptBuilder();
+		private readonly Dictionary<string, string> MethodCache = new Dictionary<string, string>();
 		private int counter;
 
 		#endregion Fields
@@ -114,14 +120,14 @@ namespace JsonFx.Jbst
 
 			#region public partial class JbstTypeName
 
-			CodeTypeDeclaration controlType = new CodeTypeDeclaration();
-			controlType.IsClass = true;
-			controlType.Name = typeName;
-			controlType.IsPartial = true;
-			controlType.Attributes = MemberAttributes.Public|MemberAttributes.Final;
+			CodeTypeDeclaration viewType = new CodeTypeDeclaration();
+			viewType.IsClass = true;
+			viewType.Name = typeName;
+			viewType.IsPartial = true;
+			viewType.Attributes = MemberAttributes.Public|MemberAttributes.Final;
 
-			controlType.BaseTypes.Add(typeof(JbstView));
-			ns.Types.Add(controlType);
+			viewType.BaseTypes.Add(typeof(JbstView));
+			ns.Types.Add(viewType);
 
 			#endregion public sealed class JbstTypeName
 
@@ -132,7 +138,7 @@ namespace JsonFx.Jbst
 			CodeAttributeDeclaration attribute = new CodeAttributeDeclaration(
 				new CodeTypeReference(typeof(BuildPathAttribute)),
 				new CodeAttributeArgument(new CodePrimitiveExpression(virtualPath)));
-			controlType.CustomAttributes.Add(attribute);
+			viewType.CustomAttributes.Add(attribute);
 
 			#endregion [BuildPath(virtualPath)]
 
@@ -144,24 +150,24 @@ namespace JsonFx.Jbst
 
 			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
 
-			controlType.Members.Add(ctor);
+			viewType.Members.Add(ctor);
 
 			#endregion Constructors
 
 			// build control tree
-			string methodName = this.BuildTemplate(state, controlType);
+			string methodName = this.BuildTemplate(state, viewType);
 
 			#region public override void Bind(TextWriter writer, object data, int index, int count)
 
 			// build binding entry point
-			this.BuildEntryPoint(methodName, controlType);
+			this.BuildEntryPoint(methodName, viewType);
 
 			#endregion public override void Bind(TextWriter writer, object data, int index, int count)
 
 			return code;
 		}
 
-		private void BuildEntryPoint(string methodName, CodeTypeDeclaration controlType)
+		private void BuildEntryPoint(string methodName, CodeTypeDeclaration viewType)
 		{
 			#region public override void Bind(TextWriter writer, object data, int index, int count)
 
@@ -182,13 +188,13 @@ namespace JsonFx.Jbst
 
 			#endregion this.BindAdapter(this.methodName, writer, data, index, count);
 
-			controlType.Members.Add(method);
+			viewType.Members.Add(method);
 		}
 
-		private string BuildTemplate(CompilationState state, CodeTypeDeclaration controlType)
+		private string BuildTemplate(CompilationState state, CodeTypeDeclaration viewType)
 		{
 			// each template gets built as a method as it can be called in a loop
-			string methodName = String.Concat("Bind_", (this.counter++).ToString("X4"));
+			string methodName = String.Format(TemplateMethodFormat, this.counter++);
 
 			#region private void methodName(TextWriter writer, object data, int index, int count)
 
@@ -219,7 +225,7 @@ namespace JsonFx.Jbst
 					if (command != null)
 					{
 						// TODO: emit code reference
-						this.BuildCommand(controlType, method, command, true);
+						this.BuildCommand(viewType, method, command, true);
 					}
 					stream.Pop();
 					continue;
@@ -232,7 +238,7 @@ namespace JsonFx.Jbst
 
 					this.EmitMarkup(markup, method);
 
-					this.BuildCommand(controlType, method, (JbstCommand)token.Value, false);
+					this.BuildCommand(viewType, method, (JbstCommand)token.Value, false);
 
 					stream.Pop();
 					stream.BeginChunk();
@@ -245,12 +251,12 @@ namespace JsonFx.Jbst
 			markup = this.HtmlFormatter.Format(stream.EndChunk());
 			this.EmitMarkup(markup, method);
 
-			controlType.Members.Add(method);
+			viewType.Members.Add(method);
 
 			return methodName;
 		}
 
-		private void BuildCommand(CodeTypeDeclaration controlType, CodeMemberMethod method, JbstCommand command, bool isAttribute)
+		private void BuildCommand(CodeTypeDeclaration viewType, CodeMemberMethod method, JbstCommand command, bool isAttribute)
 		{
 			switch (command.CommandType)
 			{
@@ -262,12 +268,12 @@ namespace JsonFx.Jbst
 				case JbstCommandType.TemplateReference:
 				{
 					JbstTemplateReference reference = (JbstTemplateReference)command;
-					this.BuildBindReferenceCall(reference.NameExpr, reference.DataExpr, reference.IndexExpr, reference.CountExpr, method);
+					this.BuildBindReferenceCall(viewType, reference.NameExpr, reference.DataExpr, reference.IndexExpr, reference.CountExpr, method);
 					return;
 				}
 				case JbstCommandType.InlineTemplate:
 				{
-					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, controlType);
+					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, viewType);
 					this.BuildBindAdapterCall(childMethod, method);
 					return;
 				}
@@ -281,20 +287,16 @@ namespace JsonFx.Jbst
 				}
 				case JbstCommandType.ExpressionBlock:
 				case JbstCommandType.UnparsedBlock:
+				case JbstCommandType.StatementBlock:
 				{
-					JbstCodeBlock codeBlock = (JbstCodeBlock)command;
-					if (!this.Transcode(codeBlock.Code, method))
+					CodeExpression expr = this.Translate(viewType, command, typeof(object));
+					if (expr == null)
 					{
 						this.BuildClientExecution(command, method);
 					}
-					return;
-				}
-				case JbstCommandType.StatementBlock:
-				{
-					JbstCodeBlock codeBlock = (JbstCodeBlock)command;
-					if (!this.Transcode(codeBlock.Code, method))
+					else
 					{
-						this.BuildClientExecution(command, method);
+						this.EmitExpression(expr, method);
 					}
 					return;
 				}
@@ -306,7 +308,7 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private void BuildBindReferenceCall(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		private void BuildBindReferenceCall(CodeTypeDeclaration viewType, object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
 			try
 			{
@@ -318,9 +320,9 @@ namespace JsonFx.Jbst
 					new CodeObjectCreateExpression(name, new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings")),
 					"Bind",
 					new CodeArgumentReferenceExpression("writer"),
-					this.EvaluateExpression(dataExpr),
-					this.EvaluateExpression(indexExpr),
-					this.EvaluateExpression(countExpr));
+					this.Translate(viewType, dataExpr, typeof(object)),
+					this.Translate(viewType, indexExpr, typeof(int)),
+					this.Translate(viewType, countExpr, typeof(int)));
 
 				#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
 
@@ -377,36 +379,40 @@ namespace JsonFx.Jbst
 			this.EmitMarkup(");</script>", method);
 		}
 
-		private CodeExpression EvaluateExpression(object expr)
+		private CodeExpression Translate(CodeTypeDeclaration viewType, object expr, Type returnType)
 		{
-			if (expr == null)
+			string script = this.FormatExpression(expr);
+
+			CodeMemberMethod method = this.JSBuilder.Translate(script, String.Format(CodeBlockMethodFormat, this.counter), returnType);
+
+			if (method == null)
 			{
+				return null;
+			}
+
+			if (method.Statements.Count < 1)
+			{
+				// no method body
 				return new CodePrimitiveExpression(null);
 			}
 
-			// TODO: convert expression to CodeDom or throw
-			switch (expr.ToString().Trim())
+			if (method.Statements.Count == 1 &&
+				method.Statements[0] is CodeMethodReturnStatement)
 			{
-				case "this.data":
-				{
-					return new CodeArgumentReferenceExpression("data");
-				}
-				case "this.index":
-				{
-					return new CodeArgumentReferenceExpression("index");
-				}
-				case "this.count":
-				{
-					return new CodeArgumentReferenceExpression("count");
-				}
+				// unwrap return expression
+				return ((CodeMethodReturnStatement)method.Statements[0]).Expression;
 			}
 
-			throw new InvalidOperationException("Cannot translate expression");
-		}
+			this.counter++;
+			viewType.Members.Add(method);
 
-		private bool Transcode(string script, CodeMemberMethod method)
-		{
-			return false;
+			// return an invokable expression
+			return new CodeMethodInvokeExpression(
+				new CodeThisReferenceExpression(),
+				method.Name,
+				new CodeArgumentReferenceExpression("data"),
+				new CodeArgumentReferenceExpression("index"),
+				new CodeArgumentReferenceExpression("count"));
 		}
 
 		public string FormatExpression(object argument)
@@ -419,25 +425,13 @@ namespace JsonFx.Jbst
 			if (argument is string)
 			{
 				// directly use as inline expression
-				return ((string)argument).Trim();
+				return ((string)argument);
 			}
 
-			if (argument is JbstExpressionBlock)
+			JbstCodeBlock block = argument as JbstCodeBlock;
+			if (block != null)
 			{
-				// convert to inline expression
-				return ((JbstExpressionBlock)argument).Code.Trim();
-			}
-
-			if (argument is JbstCommand)
-			{
-				using (StringWriter writer = new StringWriter())
-				{
-					// render code block as function
-					((JbstCommand)argument).Format(null, writer);
-
-					// convert to anonymous function call expression
-					return writer.GetStringBuilder().ToString().Trim();
-				}
+				return block.Code;
 			}
 
 			// convert to token sequence and allow formatter to emit as primitive
@@ -513,9 +507,30 @@ namespace JsonFx.Jbst
 				"Write",
 				new CodePrimitiveExpression(markup));
 
+			method.Statements.Add(methodCall);
+
 			#endregion writer.Write("escaped markup");
+		}
+
+		private void EmitExpression(CodeExpression expr, CodeMemberMethod method)
+		{
+			if (expr == null)
+			{
+				return;
+			}
+
+			#region base.WriteAdapter(writer, expr);
+
+			// let base class clean it up
+			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
+				new CodeBaseReferenceExpression(),
+				"WriteAdapter",
+				new CodeArgumentReferenceExpression("writer"),
+				expr);
 
 			method.Statements.Add(methodCall);
+
+			#endregion base.WriteAdapter(writer, expr);
 		}
 
 		private CodeVariableDeclarationStatement AllocateLocalVar<TVar>(CodeMemberMethod method, string prefix)
@@ -524,7 +539,7 @@ namespace JsonFx.Jbst
 
 			int varCount;
 			method.UserData[Key_VarCount] = varCount = method.UserData[Key_VarCount] is Int32 ? ((Int32)method.UserData[Key_VarCount])+1 : 0;
-			string locID = prefix+"_"+varCount.ToString("X");
+			string locID = String.Format(LocalVarFormat, prefix, varCount);
 
 			var newLoc = new CodeVariableDeclarationStatement(typeof(TVar), locID);
 
