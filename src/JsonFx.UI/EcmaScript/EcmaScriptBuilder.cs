@@ -106,38 +106,86 @@ namespace JsonFx.EcmaScript
 
 			foreach (var node in block.Children)
 			{
-				CodeExpression expr = this.ProcessNode(node);
-				if (expr == null)
+				CodeObject code = this.ProcessNode<TResult>(node);
+				if (code is CodeExpression)
+				{
+					method.Statements.Add((CodeExpression)code);
+				}
+				else if (code is CodeStatement)
+				{
+					method.Statements.Add((CodeStatement)code);
+				}
+				else
 				{
 					// not yet supported
 					return null;
 				}
-
-				method.Statements.Add(expr);
 			}
 
 			var index = method.Statements.Count-1;
-			if (index >= 0 &&
-				method.Statements[index] is CodeExpressionStatement)
+			if (index >= 0)
 			{
-				method.ReturnType = new CodeTypeReference(typeof(TResult));
+				// extract expression
+				CodeExpression expr;
+				if (method.Statements[index] is CodeExpressionStatement)
+				{
+					CodeExpressionStatement statement = (CodeExpressionStatement)method.Statements[index];
+					expr = statement.Expression;
+				}
+				else if (method.Statements[index] is CodeMethodReturnStatement)
+				{
+					CodeMethodReturnStatement statement = (CodeMethodReturnStatement)method.Statements[index];
+					expr = statement.Expression;
+				}
+				else
+				{
+					// bail.
+					return method;
+				}
 
-				// TODO: wrap expression in a coercion call before return
+				if (typeof(TResult) != typeof(object))
+				{
+					// wrap expression in a coercion call before return
+					expr = new CodeMethodInvokeExpression(
+						new CodeMethodReferenceExpression(
+							new CodeThisReferenceExpression(),
+							"CoerceType",
+							new CodeTypeReference(typeof(TResult))),
+						expr);
+				}
 
 				// convert expression statement to return statement
-				CodeExpressionStatement expr = (CodeExpressionStatement)method.Statements[index];
-				method.Statements[index] = new CodeMethodReturnStatement(expr.Expression);
+				method.Statements[index] = new CodeMethodReturnStatement(expr);
+				method.ReturnType = new CodeTypeReference(typeof(TResult));
 			}
 
 			return method;
 		}
 
-		private CodeExpression ProcessNode(AstNode node)
+		private CodeObject ProcessNode<TResult>(AstNode node)
 		{
+			ConstantWrapper constantWrapper = node as ConstantWrapper;
+			if (constantWrapper != null)
+			{
+				return new CodePrimitiveExpression(constantWrapper.Value);
+			}
+
 			Member memberNode = node as Member;
 			if (memberNode != null)
 			{
-				return this.ProcessMember(memberNode);
+				return this.ProcessMember<TResult>(memberNode);
+			}
+
+			ReturnNode returnNode = node as ReturnNode;
+			if (returnNode != null)
+			{
+				CodeObject code = this.ProcessNode<TResult>(returnNode.Operand);
+				if (code is CodeExpression)
+				{
+					return new CodeMethodReturnStatement((CodeExpression)code);
+				}
+
+				return null;
 			}
 
 			// TODO: process other types
@@ -146,7 +194,7 @@ namespace JsonFx.EcmaScript
 			return null;
 		}
 
-		private CodeExpression ProcessMember(Member memberNode)
+		private CodeExpression ProcessMember<TResult>(Member memberNode)
 		{
 			if (memberNode.Root is ThisLiteral)
 			{
@@ -166,17 +214,17 @@ namespace JsonFx.EcmaScript
 				}
 			}
 
-			CodeExpression root = this.ProcessNode(memberNode.Root);
-			if (root == null)
+			CodeObject root = this.ProcessNode<TResult>(memberNode.Root);
+			if (root is CodeExpression)
 			{
-				return null;
+				return new CodeMethodInvokeExpression(
+					new CodeThisReferenceExpression(),
+					"GetProperty",
+					(CodeExpression)root,
+					new CodePrimitiveExpression(memberNode.Name));
 			}
 
-			return new CodeMethodInvokeExpression(
-				new CodeTypeReferenceExpression(typeof(ModelSubsequencer)),
-				"Property",
-				root,
-				new CodeObjectCreateExpression(typeof(DataName), new CodePrimitiveExpression(memberNode.Name)));
+			return null;
 		}
 
 		private void OnCompilerError(object sender, JScriptExceptionEventArgs e)

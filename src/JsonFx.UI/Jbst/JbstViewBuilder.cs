@@ -182,11 +182,11 @@ namespace JsonFx.Jbst
 
 			#endregion public override void Bind(TextWriter writer, object data, int index, int count)
 
-			#region this.BindAdapter(this.methodName, writer, data, index, count);
+			#region this.Bind(this.methodName, writer, data, index, count);
 
 			this.BuildBindAdapterCall(methodName, method);
 
-			#endregion this.BindAdapter(this.methodName, writer, data, index, count);
+			#endregion this.Bind(this.methodName, writer, data, index, count);
 
 			viewType.Members.Add(method);
 		}
@@ -506,18 +506,18 @@ namespace JsonFx.Jbst
 
 		private void BuildBindAdapterCall(string methodName, CodeMemberMethod method)
 		{
-			#region this.BindAdapter(this.methodName, writer, data, index, count);
+			#region this.Bind(this.methodName, writer, data, index, count);
 
 			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
-				"BindAdapter",
+				"Bind",
 				new CodeMethodReferenceExpression(new CodeThisReferenceExpression(), methodName),
 				new CodeArgumentReferenceExpression("writer"),
 				new CodeArgumentReferenceExpression("data"),
 				new CodeArgumentReferenceExpression("index"),
 				new CodeArgumentReferenceExpression("count"));
 
-			#endregion this.BindAdapter(this.methodName, writer, data, index, count);
+			#endregion this.Bind(this.methodName, writer, data, index, count);
 
 			method.Statements.Add(methodCall);
 		}
@@ -571,18 +571,18 @@ namespace JsonFx.Jbst
 				return;
 			}
 
-			#region base.WriteAdapter(writer, expr);
+			#region base.Write(writer, expr);
 
 			// let base class clean it up
 			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
-				new CodeBaseReferenceExpression(),
-				"WriteAdapter",
+				new CodeThisReferenceExpression(),
+				"Write",
 				new CodeArgumentReferenceExpression("writer"),
 				expr);
 
 			method.Statements.Add(methodCall);
 
-			#endregion base.WriteAdapter(writer, expr);
+			#endregion base.Write(writer, expr);
 		}
 
 		private CodeVariableDeclarationStatement AllocateLocalVar<TVar>(CodeMemberMethod method, string prefix)
