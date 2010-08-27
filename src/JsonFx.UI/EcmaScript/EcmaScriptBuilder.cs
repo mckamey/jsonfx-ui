@@ -196,6 +196,12 @@ namespace JsonFx.EcmaScript
 				return this.ProcessMember<TResult>(memberNode);
 			}
 
+			CallNode callNode = node as CallNode;
+			if (callNode != null)
+			{
+				return this.ProcessCallNode<TResult>(callNode);
+			}
+
 			ReturnNode returnNode = node as ReturnNode;
 			if (returnNode != null)
 			{
@@ -205,6 +211,33 @@ namespace JsonFx.EcmaScript
 					return new CodeMethodReturnStatement((CodeExpression)code);
 				}
 
+				return null;
+			}
+
+			if (node is ThisLiteral)
+			{
+				return new CodeThisReferenceExpression();
+			}
+
+			BinaryOperator binaryOp = node as BinaryOperator;
+			if (binaryOp != null)
+			{
+				var left = this.ProcessNode<TResult>(binaryOp.Operand1) as CodeExpression;
+				var right = this.ProcessNode<TResult>(binaryOp.Operand2) as CodeExpression;
+				if (left == null || right == null)
+				{
+					return null;
+				}
+
+				CodeBinaryOperatorType op = EcmaScriptBuilder.MapBinaryOperator(binaryOp.OperatorToken);
+
+				return new CodeBinaryOperatorExpression(left, op, right);
+			}
+
+			Lookup lookupNode = node as Lookup;
+			if (lookupNode != null)
+			{
+				// TODO: namespace or var
 				return null;
 			}
 
@@ -245,6 +278,115 @@ namespace JsonFx.EcmaScript
 			}
 
 			return null;
+		}
+
+		private CodeExpression ProcessCallNode<TResult>(CallNode callNode)
+		{
+			int i = 0;
+			CodeExpression[] args = new CodeExpression[callNode.Arguments.Count];
+			foreach (var arg in callNode.Arguments.Children)
+			{
+				CodeObject code = this.ProcessNode<TResult>(arg);
+				if (code is CodeExpression)
+				{
+					args[i++] = (CodeExpression)code;
+				}
+				else
+				{
+					return null;
+				}
+			}
+
+			Member memberNode = callNode.Function as Member;
+			if (memberNode != null)
+			{
+				CodeObject code = this.ProcessNode<TResult>(memberNode.Root);
+				if (code is CodeExpression)
+				{
+					return new CodeMethodInvokeExpression(
+						(CodeExpression)code,
+						memberNode.Name,
+						args);
+				}
+			}
+
+			return null;
+		}
+
+		private static CodeBinaryOperatorType MapBinaryOperator(JSToken binaryOp)
+		{
+			switch (binaryOp)
+			{
+				case JSToken.Plus:
+				{
+					return CodeBinaryOperatorType.Add;
+				}
+				case JSToken.Minus:
+				{
+					return CodeBinaryOperatorType.Subtract;
+				}
+				case JSToken.Multiply:
+				{
+					return CodeBinaryOperatorType.Multiply;
+				}
+				case JSToken.Divide:
+				{
+					return CodeBinaryOperatorType.Divide;
+				}
+				case JSToken.Modulo:
+				{
+					return CodeBinaryOperatorType.Modulus;
+				}
+				case JSToken.Assign:
+				{
+					return CodeBinaryOperatorType.Assign;
+				}
+				case JSToken.NotEqual:
+				{
+					return CodeBinaryOperatorType.IdentityInequality;
+				}
+				case JSToken.Equal:
+				{
+					//return CodeBinaryOperatorType.IdentityEquality;
+					return CodeBinaryOperatorType.ValueEquality;
+				}
+				case JSToken.BitwiseOr:
+				{
+					return CodeBinaryOperatorType.BitwiseOr;
+				}
+				case JSToken.BitwiseAnd:
+				{
+					return CodeBinaryOperatorType.BitwiseAnd;
+				}
+				case JSToken.LogicalOr:
+				{
+					return CodeBinaryOperatorType.BooleanOr;
+				}
+				case JSToken.LogicalAnd:
+				{
+					return CodeBinaryOperatorType.BooleanAnd;
+				}
+				case JSToken.LessThan:
+				{
+					return CodeBinaryOperatorType.LessThan;
+				}
+				case JSToken.LessThanEqual:
+				{
+					return CodeBinaryOperatorType.LessThanOrEqual;
+				}
+				case JSToken.GreaterThan:
+				{
+					return CodeBinaryOperatorType.GreaterThan;
+				}
+				case JSToken.GreaterThanEqual:
+				{
+					return CodeBinaryOperatorType.GreaterThanOrEqual;
+				}
+				default:
+				{
+					return (CodeBinaryOperatorType)(-1);
+				}
+			}
 		}
 
 		private void OnCompilerError(object sender, JScriptExceptionEventArgs e)
