@@ -32,8 +32,6 @@ using System;
 using System.CodeDom;
 using System.Diagnostics;
 
-using JsonFx.Model;
-using JsonFx.Serialization;
 using Microsoft.Ajax.Utilities;
 
 using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
@@ -53,7 +51,6 @@ namespace JsonFx.EcmaScript
 		/// <summary>
 		/// Ctor
 		/// </summary>
-		/// <param name="hostType"></param>
 		public EcmaScriptBuilder()
 		{
 			this.CodeSettings = new CodeSettings
@@ -143,15 +140,38 @@ namespace JsonFx.EcmaScript
 					return method;
 				}
 
-				if (typeof(TResult) != typeof(object))
+				bool needsCoercion = (typeof(TResult) != typeof(object));
+				if (needsCoercion)
 				{
-					// wrap expression in a coercion call before return
-					expr = new CodeMethodInvokeExpression(
-						new CodeMethodReferenceExpression(
-							new CodeThisReferenceExpression(),
-							"CoerceType",
-							new CodeTypeReference(typeof(TResult))),
-						expr);
+					if (expr is CodeArgumentReferenceExpression)
+					{
+						string paramName = ((CodeArgumentReferenceExpression)expr).ParameterName;
+						if ((paramName == "index") || (paramName == "count"))
+						{
+							if (typeof(TResult) == typeof(int))
+							{
+								needsCoercion = false;
+							}
+						}
+					}
+					else if (expr is CodePrimitiveExpression)
+					{
+						if (((CodePrimitiveExpression)expr).Value is TResult)
+						{
+							needsCoercion = false;
+						}
+					}
+
+					if (needsCoercion)
+					{
+						// wrap expression in a coercion call before return
+						expr = new CodeMethodInvokeExpression(
+							new CodeMethodReferenceExpression(
+								new CodeThisReferenceExpression(),
+								"CoerceType",
+								new CodeTypeReference(typeof(TResult))),
+							expr);
+					}
 				}
 
 				// convert expression statement to return statement

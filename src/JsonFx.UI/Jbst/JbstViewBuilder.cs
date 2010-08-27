@@ -289,7 +289,7 @@ namespace JsonFx.Jbst
 				case JbstCommandType.UnparsedBlock:
 				case JbstCommandType.StatementBlock:
 				{
-					CodeExpression expr = this.Translate<object>(viewType, command);
+					CodeExpression expr = this.Translate(viewType, command);
 					if (expr == null)
 					{
 						this.BuildClientExecution(command, method);
@@ -322,15 +322,15 @@ namespace JsonFx.Jbst
 				}
 				else
 				{
-					nameCode = this.Translate<object>(viewType, nameExpr);
+					nameCode = this.Translate(viewType, nameExpr);
 				}
 			}
 			else
 			{
-				nameCode = this.Translate<object>(viewType, nameExpr);
+				nameCode = this.Translate(viewType, nameExpr);
 			}
 
-			CodeExpression dataCode = this.Translate<object>(viewType, dataExpr);
+			CodeExpression dataCode = this.Translate(viewType, dataExpr);
 			CodeExpression indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) : null;
 			CodeExpression countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) : null;
 
@@ -413,6 +413,11 @@ namespace JsonFx.Jbst
 			this.EmitMarkup(",", method);
 			this.EmitMarkup(this.FormatExpression(countExpr), method);
 			this.EmitMarkup(");</script>", method);
+		}
+
+		public CodeExpression Translate(CodeTypeDeclaration viewType, object expr)
+		{
+			return this.Translate<object>(viewType, expr);
 		}
 
 		private CodeExpression Translate<TResult>(CodeTypeDeclaration viewType, object expr)
