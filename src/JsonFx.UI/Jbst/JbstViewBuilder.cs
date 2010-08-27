@@ -184,7 +184,13 @@ namespace JsonFx.Jbst
 
 			#region this.Bind(this.methodName, writer, data, index, count);
 
-			this.BuildBindAdapterCall(methodName, method);
+			this.BuildBindAdapterCall(
+				viewType,
+				methodName,
+				null,
+				null,
+				null,
+				method);
 
 			#endregion this.Bind(this.methodName, writer, data, index, count);
 
@@ -224,18 +230,25 @@ namespace JsonFx.Jbst
 					JbstCommand command = token.Value as JbstCommand;
 					if (command != null)
 					{
+						markup = this.HtmlFormatter.Format(stream.EndChunk());
+						this.EmitMarkup(markup, method);
+
 						// TODO: emit code reference
 						this.BuildCommand(viewType, method, command, true);
+
+						stream.Pop();
+						stream.BeginChunk();
 					}
-					stream.Pop();
+					else
+					{
+						stream.Pop();
+					}
 					continue;
 				}
-
-				if (token.TokenType == MarkupTokenType.Primitive &&
+				else if (token.TokenType == MarkupTokenType.Primitive &&
 					token.Value is JbstCommand)
 				{
 					markup = this.HtmlFormatter.Format(stream.EndChunk());
-
 					this.EmitMarkup(markup, method);
 
 					this.BuildCommand(viewType, method, (JbstCommand)token.Value, false);
@@ -273,8 +286,9 @@ namespace JsonFx.Jbst
 				}
 				case JbstCommandType.InlineTemplate:
 				{
-					string childMethod = this.BuildTemplate(((JbstInlineTemplate)command).State, viewType);
-					this.BuildBindAdapterCall(childMethod, method);
+					JbstInlineTemplate inline = (JbstInlineTemplate)command;
+					string childMethod = this.BuildTemplate(inline.State, viewType);
+					this.BuildBindAdapterCall(viewType, childMethod, inline.DataExpr, inline.IndexExpr, inline.CountExpr, method);
 					return;
 				}
 				case JbstCommandType.CommentBlock:
@@ -330,9 +344,8 @@ namespace JsonFx.Jbst
 				nameCode = this.Translate(viewType, nameExpr);
 			}
 
-			CodeExpression dataCode = this.Translate(viewType, dataExpr);
-			CodeExpression indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) : null;
-			CodeExpression countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) : null;
+			CodeExpression dataCode, indexCode, countCode;
+			this.ProcessArgs(viewType, dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
 
 			if (dataCode == null || indexCode == null || countCode == null)
 			{
@@ -340,6 +353,25 @@ namespace JsonFx.Jbst
 				this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr, method);
 				return;
 			}
+
+			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
+				nameCode,
+				"Bind",
+				new CodeArgumentReferenceExpression("writer"),
+				dataCode,
+				indexCode,
+				countCode);
+
+			#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
+
+			method.Statements.Add(methodCall);
+		}
+
+		private void ProcessArgs(CodeTypeDeclaration viewType, object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
+		{
+			dataCode = this.Translate(viewType, dataExpr);
+			indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) : null;
+			countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) : null;
 
 			if (dataCode is CodeDefaultValueExpression)
 			{
@@ -356,18 +388,6 @@ namespace JsonFx.Jbst
 				// expression evaluated to an empty method so pass surrounding scope through
 				countCode = new CodeArgumentReferenceExpression("count");
 			}
-
-			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
-				nameCode,
-				"Bind",
-				new CodeArgumentReferenceExpression("writer"),
-				dataCode,
-				indexCode,
-				countCode);
-
-			#endregion new ExternalTemplate().Bind(writer, dataExpr, indexExpr, countExpr);
-
-			method.Statements.Add(methodCall);
 		}
 
 		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
@@ -509,8 +529,17 @@ namespace JsonFx.Jbst
 				method);
 		}
 
-		private void BuildBindAdapterCall(string methodName, CodeMemberMethod method)
+		private void BuildBindAdapterCall(CodeTypeDeclaration viewType, string methodName, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
+			CodeExpression dataCode, indexCode, countCode;
+			this.ProcessArgs(viewType, dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
+
+			if (dataCode == null || indexCode == null || countCode == null)
+			{
+				// TODO
+				return;
+			}
+
 			#region this.Bind(this.methodName, writer, data, index, count);
 
 			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
@@ -518,9 +547,9 @@ namespace JsonFx.Jbst
 				"Bind",
 				new CodeMethodReferenceExpression(new CodeThisReferenceExpression(), methodName),
 				new CodeArgumentReferenceExpression("writer"),
-				new CodeArgumentReferenceExpression("data"),
-				new CodeArgumentReferenceExpression("index"),
-				new CodeArgumentReferenceExpression("count"));
+				dataCode,
+				indexCode,
+				countCode);
 
 			#endregion this.Bind(this.methodName, writer, data, index, count);
 

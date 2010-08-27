@@ -164,13 +164,7 @@ namespace JsonFx.EcmaScript
 
 					if (needsCoercion)
 					{
-						// wrap expression in a coercion call before return
-						expr = new CodeMethodInvokeExpression(
-							new CodeMethodReferenceExpression(
-								new CodeThisReferenceExpression(),
-								"CoerceType",
-								new CodeTypeReference(typeof(TResult))),
-							expr);
+						expr = this.WrapWithCoercion<TResult>(expr);
 					}
 				}
 
@@ -180,6 +174,17 @@ namespace JsonFx.EcmaScript
 			}
 
 			return method;
+		}
+
+		private CodeExpression WrapWithCoercion<TResult>(CodeExpression expr)
+		{
+			// wrap expression in a coercion call before return
+			return new CodeMethodInvokeExpression(
+				new CodeMethodReferenceExpression(
+					new CodeThisReferenceExpression(),
+					"CoerceType",
+					new CodeTypeReference(typeof(TResult))),
+				expr);
 		}
 
 		private CodeObject ProcessNode<TResult>(AstNode node)
@@ -199,7 +204,8 @@ namespace JsonFx.EcmaScript
 			CallNode callNode = node as CallNode;
 			if (callNode != null)
 			{
-				return this.ProcessCallNode<TResult>(callNode);
+				return null;
+				//return this.ProcessCallNode<TResult>(callNode);
 			}
 
 			ReturnNode returnNode = node as ReturnNode;

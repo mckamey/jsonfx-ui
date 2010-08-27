@@ -135,6 +135,7 @@ namespace JsonFx.Jbst
 			if (!sequence.IsArray())
 			{
 				binder(writer, sequence, index, count);
+				return;
 			}
 
 			var items = sequence.ArrayItems();
@@ -161,6 +162,7 @@ namespace JsonFx.Jbst
 				foreach (var result in this.Analyzer.Analyze((TokenSequence)value))
 				{
 					writer.Write(result);
+					break;
 				}
 			}
 			else
@@ -177,6 +179,21 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		protected T CoerceType<T>(object value)
 		{
+			if (value is TokenSequence)
+			{
+				if (typeof(TokenSequence).IsAssignableFrom(typeof(T)))
+				{
+					return this.Coercion.CoerceType<T>(value);
+				}
+
+				// FirstOrDefault()
+				foreach (var result in this.Analyzer.Analyze<T>((TokenSequence)value))
+				{
+					return result;
+				}
+				return default(T);
+			}
+
 			return this.Coercion.CoerceType<T>(value);
 		}
 
