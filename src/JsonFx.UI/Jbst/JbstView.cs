@@ -188,6 +188,37 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		protected TokenSequence GetProperty(TokenSequence input, string propertyName)
 		{
+			if (input.IsArray())
+			{
+				int index;
+				if (propertyName == "length")
+				{
+					// get array length
+					int count = 0;
+					using (var enumerator = input.ArrayItems().GetEnumerator())
+					{
+						while (enumerator.MoveNext())
+						{
+							count++;
+						}
+					}
+					return new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, count) };
+				}
+				else if (Int32.TryParse(propertyName, out index))
+				{
+					// get array item at index
+					var items = input.ArrayItems(i => (i == index));
+					foreach (var item in items)
+					{
+						return item;
+					}
+					return JbstView.EmptySequence;
+				}
+
+				// hmm...
+				return JbstView.EmptySequence;
+			}
+
 			return input.Property(new DataName(propertyName));
 		}
 
