@@ -71,8 +71,16 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Ctor
 		/// </summary>
+		protected JbstView()
+			: this(new DataWriterSettings())
+		{
+		}
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
 		/// <param name="settings"></param>
-		public JbstView(DataWriterSettings settings)
+		protected JbstView(DataWriterSettings settings)
 		{
 			this.Settings = settings;
 			this.Walker = new ModelWalker(settings);

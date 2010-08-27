@@ -146,6 +146,10 @@ namespace JsonFx.Jbst
 
 			CodeConstructor ctor = new CodeConstructor();
 			ctor.Attributes = MemberAttributes.Public;
+			viewType.Members.Add(ctor);
+
+			ctor = new CodeConstructor();
+			ctor.Attributes = MemberAttributes.Public;
 			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(DataWriterSettings), "settings"));
 
 			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
