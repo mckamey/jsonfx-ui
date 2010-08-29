@@ -63,7 +63,7 @@ namespace JsonFx.Jbst
 
 		private readonly HtmlFormatter HtmlFormatter;
 		private readonly EcmaScriptFormatter JSFormatter;
-		private readonly EcmaScriptBuilder JSBuilder = new EcmaScriptBuilder();
+		private readonly EcmaScriptBuilder JSBuilder;
 		private readonly Dictionary<string, string> MethodCache = new Dictionary<string, string>();
 		private int counter;
 
@@ -77,6 +77,8 @@ namespace JsonFx.Jbst
 		/// <param name="settings"></param>
 		public JbstViewBuilder(DataWriterSettings settings)
 		{
+			this.JSBuilder = new EcmaScriptBuilder(settings);
+
 			this.HtmlFormatter = new HtmlFormatter(settings)
 			{
 				CanonicalForm = false,
@@ -446,51 +448,57 @@ namespace JsonFx.Jbst
 
 		private CodeExpression Translate<TResult>(CodeTypeDeclaration viewType, object expr)
 		{
-			string script = this.FormatExpression(expr);
+			TranslationResult result = new TranslationResult(typeof(TResult), String.Format(CodeBlockMethodFormat, this.counter))
+			{
+				Script = this.FormatExpression(expr)
+			};
 
-			CodeMemberMethod method = this.JSBuilder.Translate<TResult>(String.Format(CodeBlockMethodFormat, this.counter), script);
-			if (method == null)
+			this.JSBuilder.Translate(result);
+			if (result.IsClientOnly)
 			{
 				// not yet supported
 				return null;
 			}
 
-			if (method.Statements.Count < 1)
+			int lineCount = result.LineCount;
+			if (lineCount < 1)
 			{
 				// no method body, return default value of expected type
 				return new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
 			}
 
-			if (method.Statements.Count == 1)
+			if (lineCount == 1)
 			{
-				if (method.Statements[0] is CodeMethodReturnStatement)
+				var onlyLine = result.Method.Statements[0];
+
+				if (onlyLine is CodeMethodReturnStatement)
 				{
 					// unwrap return expression
-					return ((CodeMethodReturnStatement)method.Statements[0]).Expression;
+					return ((CodeMethodReturnStatement)onlyLine).Expression;
 				}
 
-				if (method.Statements[0] is CodeExpressionStatement)
+				if (onlyLine is CodeExpressionStatement)
 				{
 					// unwrap expression statement
-					return ((CodeExpressionStatement)method.Statements[0]).Expression;
+					return ((CodeExpressionStatement)onlyLine).Expression;
 				}
 
-				if (method.Statements[0] is CodeSnippetStatement)
+				if (onlyLine is CodeSnippetStatement)
 				{
 					// unwrap snippet statement
-					return new CodeSnippetExpression(((CodeSnippetStatement)method.Statements[0]).Value);
+					return new CodeSnippetExpression(((CodeSnippetStatement)onlyLine).Value);
 				}
 
-				// for now, others remain as a method
+				// for now, others remain as a complete method
 			}
 
 			this.counter++;
-			viewType.Members.Add(method);
+			viewType.Members.Add(result.Method);
 
 			// return an invokable expression
 			return new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
-				method.Name,
+				result.Method.Name,
 				new CodeArgumentReferenceExpression("data"),
 				new CodeArgumentReferenceExpression("index"),
 				new CodeArgumentReferenceExpression("count"));

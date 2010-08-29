@@ -201,6 +201,10 @@ namespace JsonFx.Jbst
 				}
 				return default(T);
 			}
+			else if (typeof(T).IsAssignableFrom(typeof(TokenSequence)))
+			{
+				return (T)this.Walker.GetTokens(value);
+			}
 
 			return this.Coercion.CoerceType<T>(value);
 		}

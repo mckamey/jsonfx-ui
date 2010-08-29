@@ -32,6 +32,7 @@ using System;
 using System.CodeDom;
 using System.Diagnostics;
 
+using JsonFx.Serialization;
 using Microsoft.Ajax.Utilities;
 
 using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
@@ -40,9 +41,17 @@ namespace JsonFx.EcmaScript
 {
 	internal class EcmaScriptBuilder
 	{
+		#region Constants
+
+		private static readonly Type EmptyType = typeof(object);
+
+		#endregion Constants
+
 		#region Fields
 
+		private readonly TypeCoercionUtility Coercion;
 		private readonly CodeSettings CodeSettings;
+		private readonly string[] GlobalVars;
 
 		#endregion Fields
 
@@ -51,12 +60,22 @@ namespace JsonFx.EcmaScript
 		/// <summary>
 		/// Ctor
 		/// </summary>
-		public EcmaScriptBuilder()
+		public EcmaScriptBuilder(DataWriterSettings settings)
 		{
+			this.Coercion = new TypeCoercionUtility(settings, true);
+
+			// settings to balance compatibility with compactness
 			this.CodeSettings = new CodeSettings
 			{
-				// TODO.
+				CollapseToLiteral = true,
+				MacSafariQuirks = true,
+				MinifyCode = true,
+				OutputMode = OutputMode.SingleLine,
+				RemoveUnneededCode = true,
+				StripDebugStatements = false
 			};
+
+			this.GlobalVars = new[] { "JSON", "JsonML", "JsonFx" };
 		}
 
 		#endregion Init
@@ -69,26 +88,21 @@ namespace JsonFx.EcmaScript
 		/// <param name="methodName"></param>
 		/// <param name="script"></param>
 		/// <returns></returns>
-		public CodeMemberMethod Translate<TResult>(string methodName, string script)
+		public void Translate(TranslationResult result)
 		{
-			CodeMemberMethod method = new CodeMemberMethod();
-			method.Name = methodName;
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TokenSequence), "data"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
-
-			if (String.IsNullOrEmpty(script))
+			if (String.IsNullOrEmpty(result.Script))
 			{
 				// technically undefined
-				return method;
+				return;
 			}
 
-			JSParser parser = new JSParser(script, null);
+			JSParser parser = new JSParser(result.Script, this.GlobalVars);
 			parser.CompilerError += new EventHandler<JScriptExceptionEventArgs>(this.OnCompilerError);
 			Block block;
 			try
 			{
 				block = parser.Parse(this.CodeSettings);
+				result.Script = block.ToCode(ToCodeFormat.Normal);
 			}
 #if DEBUG
 			catch (Exception ex)
@@ -98,146 +112,73 @@ namespace JsonFx.EcmaScript
 			catch
 			{
 #endif
-				return null;
+				result.IsClientOnly = true;
+				return;
 			}
 
 			foreach (var node in block.Children)
 			{
-				CodeObject code = this.ProcessNode<TResult>(node);
-				if (code is CodeExpression)
-				{
-					method.Statements.Add((CodeExpression)code);
-				}
-				else if (code is CodeStatement)
-				{
-					method.Statements.Add((CodeStatement)code);
-				}
-				else
+				ExpressionResult expr = this.Visit(node, result.ResultType);
+				if (!result.AddStatement(expr))
 				{
 					// not yet supported
-					return null;
+					result.IsClientOnly = true;
+					return;
 				}
 			}
 
-			var index = method.Statements.Count-1;
-			if (index >= 0)
-			{
-				// extract expression
-				CodeExpression expr;
-				if (method.Statements[index] is CodeExpressionStatement)
-				{
-					CodeExpressionStatement statement = (CodeExpressionStatement)method.Statements[index];
-					expr = statement.Expression;
-				}
-				else if (method.Statements[index] is CodeMethodReturnStatement)
-				{
-					CodeMethodReturnStatement statement = (CodeMethodReturnStatement)method.Statements[index];
-					expr = statement.Expression;
-				}
-				else
-				{
-					// bail.
-					return method;
-				}
-
-				bool needsCoercion = (typeof(TResult) != typeof(object));
-				if (needsCoercion)
-				{
-					if (expr is CodeArgumentReferenceExpression)
-					{
-						string paramName = ((CodeArgumentReferenceExpression)expr).ParameterName;
-						if ((paramName == "index") || (paramName == "count"))
-						{
-							if (typeof(TResult) == typeof(int))
-							{
-								needsCoercion = false;
-							}
-						}
-					}
-					else if (expr is CodePrimitiveExpression)
-					{
-						if (((CodePrimitiveExpression)expr).Value is TResult)
-						{
-							needsCoercion = false;
-						}
-					}
-
-					if (needsCoercion)
-					{
-						expr = this.WrapWithCoercion<TResult>(expr);
-					}
-				}
-
-				// convert expression statement to return statement
-				method.Statements[index] = new CodeMethodReturnStatement(expr);
-				method.ReturnType = new CodeTypeReference(typeof(TResult));
-			}
-
-			return method;
+			result.TranslationComplete();
 		}
 
-		private CodeExpression WrapWithCoercion<TResult>(CodeExpression expr)
-		{
-			// wrap expression in a coercion call before return
-			return new CodeMethodInvokeExpression(
-				new CodeMethodReferenceExpression(
-					new CodeThisReferenceExpression(),
-					"CoerceType",
-					new CodeTypeReference(typeof(TResult))),
-				expr);
-		}
-
-		private CodeObject ProcessNode<TResult>(AstNode node)
+		private ExpressionResult Visit(AstNode node, Type expectedType)
 		{
 			ConstantWrapper constantWrapper = node as ConstantWrapper;
 			if (constantWrapper != null)
 			{
-				return new CodePrimitiveExpression(constantWrapper.Value);
+				return this.VisitConstantWrapper(constantWrapper, expectedType);
 			}
 
 			Member memberNode = node as Member;
 			if (memberNode != null)
 			{
-				return this.ProcessMember<TResult>(memberNode);
+				return this.VisitMember(memberNode, expectedType);
 			}
 
 			CallNode callNode = node as CallNode;
 			if (callNode != null)
 			{
 				return null;
-				//return this.ProcessCallNode<TResult>(callNode);
+				//return this.VisitCallNode(callNode, expectedType);
 			}
 
 			ReturnNode returnNode = node as ReturnNode;
 			if (returnNode != null)
 			{
-				CodeObject code = this.ProcessNode<TResult>(returnNode.Operand);
-				if (code is CodeExpression)
+				ExpressionResult code = this.Visit(returnNode.Operand, expectedType);
+				if (code == null || code.Expression == null)
 				{
-					return new CodeMethodReturnStatement((CodeExpression)code);
+					return code;
 				}
 
-				return null;
+				return new ExpressionResult
+				{
+					Statement = new CodeMethodReturnStatement((CodeExpression)code.Expression)
+				};
 			}
 
 			if (node is ThisLiteral)
 			{
-				return new CodeThisReferenceExpression();
+				return new ExpressionResult
+				{
+					Expression = new CodeThisReferenceExpression(),
+					ExpressionType = typeof(object) // TODO: get real JBST type
+				};
 			}
 
 			BinaryOperator binaryOp = node as BinaryOperator;
 			if (binaryOp != null)
 			{
-				var left = this.ProcessNode<TResult>(binaryOp.Operand1) as CodeExpression;
-				var right = this.ProcessNode<TResult>(binaryOp.Operand2) as CodeExpression;
-				if (left == null || right == null)
-				{
-					return null;
-				}
-
-				CodeBinaryOperatorType op = EcmaScriptBuilder.MapBinaryOperator(binaryOp.OperatorToken);
-
-				return new CodeBinaryOperatorExpression(left, op, right);
+				return this.VisitBinaryOperator(expectedType, binaryOp);
 			}
 
 			Lookup lookupNode = node as Lookup;
@@ -253,17 +194,51 @@ namespace JsonFx.EcmaScript
 			return null;
 		}
 
-		private CodeExpression ProcessMember<TResult>(Member memberNode)
+		private ExpressionResult VisitConstantWrapper(ConstantWrapper constantWrapper, Type expectedType)
+		{
+			CodeExpression expr;
+			Type exprType = expectedType;
+
+			object value = constantWrapper.Value;
+			if (value != null)
+			{
+				Type actualType = value.GetType();
+				expr = this.EnsureCoercion(expectedType, actualType, new CodePrimitiveExpression(value));
+				if (expr is CodePrimitiveExpression)
+				{
+					exprType = actualType;
+				}
+			}
+			else if (expectedType == EmptyType || expectedType.IsClass)
+			{
+				expr = new CodePrimitiveExpression(null);
+			}
+			else
+			{
+				expr = new CodeDefaultValueExpression(new CodeTypeReference(expectedType));
+			}
+
+			return new ExpressionResult
+			{
+				Expression = expr,
+				ExpressionType = exprType
+			};
+		}
+
+		private ExpressionResult VisitMember(Member memberNode, Type expectedType)
 		{
 			if (memberNode.Root is ThisLiteral)
 			{
 				switch (memberNode.Name)
 				{
 					case "data":
+					{
+						return this.VisitArgumentReference(expectedType, typeof(TokenSequence), memberNode.Name);
+					}
 					case "index":
 					case "count":
 					{
-						return new CodeArgumentReferenceExpression(memberNode.Name);
+						return this.VisitArgumentReference(expectedType, typeof(int), memberNode.Name);
 					}
 					default:
 					{
@@ -273,50 +248,195 @@ namespace JsonFx.EcmaScript
 				}
 			}
 
-			CodeObject root = this.ProcessNode<TResult>(memberNode.Root);
-			if (root is CodeExpression)
+			ExpressionResult root = this.Visit(memberNode.Root, expectedType);
+			if (root == null)
 			{
-				return new CodeMethodInvokeExpression(
-					new CodeThisReferenceExpression(),
-					"GetProperty",
-					(CodeExpression)root,
-					new CodePrimitiveExpression(memberNode.Name));
+				return null;
 			}
 
-			return null;
+			if (root.ExpressionType != typeof(TokenSequence))
+			{
+				// first convert expression to TokenSequence
+				root.Expression = new CodeMethodInvokeExpression(
+					new CodeMethodReferenceExpression(
+						new CodeThisReferenceExpression(),
+						"CoerceType",
+						new CodeTypeReference(typeof(TokenSequence))),
+					root.Expression);
+			}
+
+			return new ExpressionResult
+			{
+				Expression = new CodeMethodInvokeExpression(
+					new CodeThisReferenceExpression(),
+					"GetProperty",
+					root.Expression,
+					new CodePrimitiveExpression(memberNode.Name)),
+				ExpressionType = typeof(object)
+			};
 		}
 
-		private CodeExpression ProcessCallNode<TResult>(CallNode callNode)
+		private ExpressionResult VisitArgumentReference(Type expectedType, Type actualType, string name)
+		{
+			CodeExpression expr = this.EnsureCoercion(expectedType, actualType, new CodeArgumentReferenceExpression(name));
+
+			return new ExpressionResult
+			{
+				Expression =  expr,
+				ExpressionType = (expr is CodeArgumentReferenceExpression) ? actualType : expectedType
+			};
+		}
+
+		private ExpressionResult VisitBinaryOperator(Type expectedType, BinaryOperator binaryOp)
+		{
+			var left = this.Visit(binaryOp.Operand1, expectedType);
+			var right = this.Visit(binaryOp.Operand2, expectedType);
+
+			if (left == null || left.Expression == null ||
+				right == null || right.Expression == null)
+			{
+				return null;
+			}
+
+			CodeBinaryOperatorType op = EcmaScriptBuilder.MapBinaryOperator(binaryOp.OperatorToken);
+
+			Type exprType = this.EnsureCompatibleTypes(left, right, expectedType);
+
+			return new ExpressionResult
+			{
+				ExpressionType = exprType,
+				Expression = new CodeBinaryOperatorExpression(left.Expression, op, right.Expression)
+			};
+		}
+
+		private Type EnsureCompatibleTypes(ExpressionResult left, ExpressionResult right, Type expectedType)
+		{
+			if (left.ExpressionType == EmptyType)
+			{
+				if (right.ExpressionType == EmptyType)
+				{
+					// convert both objects to expected type
+					left.Expression = this.DeferredCoerceType(expectedType, left.Expression);
+					right.Expression = this.DeferredCoerceType(expectedType, right.Expression);
+					return expectedType;
+				}
+
+				// convert one object to the other type
+				left.Expression = this.DeferredCoerceType(right.ExpressionType, left.Expression);
+				return (left.ExpressionType = right.ExpressionType);
+			}
+
+			if (right.ExpressionType == EmptyType)
+			{
+				// convert one object to the other type
+				right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
+				return (right.ExpressionType = left.ExpressionType);
+			}
+
+			if (left.ExpressionType == typeof(TokenSequence))
+			{
+				if (right.ExpressionType == typeof(TokenSequence))
+				{
+					// convert both token sequences to expected type
+					left.Expression = this.DeferredCoerceType(expectedType, left.Expression);
+					right.Expression = this.DeferredCoerceType(expectedType, right.Expression);
+					return expectedType;
+				}
+
+				// convert one token sequence to the other type
+				left.Expression = this.DeferredCoerceType(right.ExpressionType, left.Expression);
+				return (left.ExpressionType = right.ExpressionType);
+			}
+
+			if (right.ExpressionType == typeof(TokenSequence))
+			{
+				// convert one token sequence to the other type
+				right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
+				return (right.ExpressionType = left.ExpressionType);
+			}
+
+			if (left.ExpressionType.IsAssignableFrom(right.ExpressionType))
+			{
+				// right compatible with left type
+				return left.ExpressionType;
+			}
+
+			if (right.ExpressionType.IsAssignableFrom(left.ExpressionType))
+			{
+				// left is compatible with right type
+				return right.ExpressionType;
+			}
+
+			// arbitrary choice needed, use left type
+			right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
+			return (right.ExpressionType = left.ExpressionType);
+		}
+
+		private ExpressionResult VisitCallNode(CallNode callNode, Type expectedType)
 		{
 			int i = 0;
 			CodeExpression[] args = new CodeExpression[callNode.Arguments.Count];
 			foreach (var arg in callNode.Arguments.Children)
 			{
-				CodeObject code = this.ProcessNode<TResult>(arg);
-				if (code is CodeExpression)
-				{
-					args[i++] = (CodeExpression)code;
-				}
-				else
+				ExpressionResult code = this.Visit(arg, expectedType);
+				if (code == null ||
+					code.Expression == null)
 				{
 					return null;
 				}
+
+				args[i++] = code.Expression;
 			}
 
 			Member memberNode = callNode.Function as Member;
 			if (memberNode != null)
 			{
-				CodeObject code = this.ProcessNode<TResult>(memberNode.Root);
-				if (code is CodeExpression)
+				ExpressionResult code = this.Visit(memberNode.Root, expectedType);
+				if (code != null &&
+					code.Expression != null)
 				{
-					return new CodeMethodInvokeExpression(
-						(CodeExpression)code,
-						memberNode.Name,
-						args);
+					CodeExpression expr = new CodeMethodInvokeExpression(code.Expression, memberNode.Name, args);
+
+					return new ExpressionResult
+					{
+						Expression = this.DeferredCoerceType(expectedType, expr),
+						ExpressionType = expectedType
+					};
 				}
 			}
 
 			return null;
+		}
+
+		private CodeExpression EnsureCoercion(Type expectedType, Type exprType, CodeExpression expr)
+		{
+			if (expectedType == EmptyType ||
+				expectedType.IsAssignableFrom(exprType))
+			{
+				return expr;
+			}
+
+			return this.DeferredCoerceType(expectedType, expr);
+		}
+
+		private CodeExpression DeferredCoerceType(Type targetType, CodeExpression expr)
+		{
+			if (expr is CodePrimitiveExpression)
+			{
+				// coerce at compile time so doesn't need to happen at runtime
+				object value = ((CodePrimitiveExpression)expr).Value;
+				((CodePrimitiveExpression)expr).Value = this.Coercion.CoerceType(targetType, value);
+
+				return expr;
+			}
+
+			// wrap expression in a coercion call before return
+			return new CodeMethodInvokeExpression(
+				new CodeMethodReferenceExpression(
+					new CodeThisReferenceExpression(),
+					"CoerceType",
+					new CodeTypeReference(targetType)),
+				expr);
 		}
 
 		private static CodeBinaryOperatorType MapBinaryOperator(JSToken binaryOp)
@@ -397,7 +517,9 @@ namespace JsonFx.EcmaScript
 
 		private void OnCompilerError(object sender, JScriptExceptionEventArgs e)
 		{
-			//System.Diagnostics.Debugger.Break();
+			JScriptException exception = e.Exception;
+
+			// TODO: report JavaScript error
 		}
 
 		#endregion Methods
