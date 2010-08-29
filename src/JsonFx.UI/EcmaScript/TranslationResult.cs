@@ -35,8 +35,6 @@ using System.Diagnostics;
 using JsonFx.Serialization;
 using Microsoft.Ajax.Utilities;
 
-using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
-
 namespace JsonFx.EcmaScript
 {
 	internal class TranslationResult
@@ -64,7 +62,7 @@ namespace JsonFx.EcmaScript
 					Name = methodName
 				};
 
-			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TokenSequence), "data"));
+			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
 			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
 			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
 		}

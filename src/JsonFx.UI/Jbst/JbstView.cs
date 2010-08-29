@@ -44,7 +44,7 @@ namespace JsonFx.Jbst
 	{
 		#region Delegates
 
-		protected delegate void BindDelegate(TextWriter writer, TokenSequence data, int index, int count);
+		protected delegate void BindDelegate(TextWriter writer, object data, int index, int count);
 
 		#endregion Delegates
 
@@ -134,24 +134,37 @@ namespace JsonFx.Jbst
 		/// <param name="count"></param>
 		protected void Bind(BindDelegate binder, TextWriter writer, object data, int index, int count)
 		{
+			// TODO: refactor Bind so object normalization only occurs at top-level binding
+
 			var sequence = (data ?? JbstView.EmptySequence) as TokenSequence;
 			if (sequence == null)
 			{
+				// serialize to tokens
 				sequence = this.Walker.GetTokens(data);
 			}
 
-			if (!sequence.IsArray())
+			// check array at token level
+			bool isArray = sequence.IsArray();
+
+			// hydrate back to generalized objects
+			data = null;
+			foreach (var result in this.Analyzer.Analyze(sequence))
 			{
-				binder(writer, sequence, index, count);
+				data = result;
+				break;
+			}
+
+			if (!isArray)
+			{
+				binder(writer, data, index, count);
 				return;
 			}
 
-			var items = sequence.ArrayItems();
-			ICollection<TokenSequence> itemList = (items as ICollection<TokenSequence>) ?? new List<TokenSequence>(items);
+			ICollection array = (data as ICollection);
 
 			index = 0;
-			count = itemList.Count;
-			foreach (var item in itemList)
+			count = array.Count;
+			foreach (var item in array)
 			{
 				binder(writer, item, index++, count);
 			}
@@ -164,16 +177,16 @@ namespace JsonFx.Jbst
 		/// <param name="value"></param>
 		protected void Write(TextWriter writer, object value)
 		{
-			if (value is TokenSequence)
-			{
-				// FirstOrDefault()
-				foreach (var result in this.Analyzer.Analyze((TokenSequence)value))
-				{
-					writer.Write(result);
-					break;
-				}
-			}
-			else
+			//if (value is TokenSequence)
+			//{
+			//    // FirstOrDefault()
+			//    foreach (var result in this.Analyzer.Analyze((TokenSequence)value))
+			//    {
+			//        writer.Write(result);
+			//        break;
+			//    }
+			//}
+			//else
 			{
 				writer.Write(value);
 			}
@@ -187,24 +200,24 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		protected T CoerceType<T>(object value)
 		{
-			if (value is TokenSequence)
-			{
-				if (typeof(TokenSequence).IsAssignableFrom(typeof(T)))
-				{
-					return this.Coercion.CoerceType<T>(value);
-				}
+			//if (value is TokenSequence)
+			//{
+			//    if (typeof(TokenSequence).IsAssignableFrom(typeof(T)))
+			//    {
+			//        return this.Coercion.CoerceType<T>(value);
+			//    }
 
-				// FirstOrDefault()
-				foreach (var result in this.Analyzer.Analyze<T>((TokenSequence)value))
-				{
-					return result;
-				}
-				return default(T);
-			}
-			else if (typeof(T).IsAssignableFrom(typeof(TokenSequence)))
-			{
-				return (T)this.Walker.GetTokens(value);
-			}
+			//    // FirstOrDefault()
+			//    foreach (var result in this.Analyzer.Analyze<T>((TokenSequence)value))
+			//    {
+			//        return result;
+			//    }
+			//    return default(T);
+			//}
+			//else if (typeof(T).IsAssignableFrom(typeof(TokenSequence)))
+			//{
+			//    return (T)this.Walker.GetTokens(value);
+			//}
 
 			return this.Coercion.CoerceType<T>(value);
 		}
@@ -215,40 +228,72 @@ namespace JsonFx.Jbst
 		/// <param name="input"></param>
 		/// <param name="propertyName"></param>
 		/// <returns></returns>
-		protected TokenSequence GetProperty(TokenSequence input, string propertyName)
+		protected object GetProperty(object input, string propertyName)
 		{
-			if (input.IsArray())
+			IDictionary<string, object> genericDictionary = input as IDictionary<string, object>;
+			if (genericDictionary != null)
 			{
-				int index;
+				object value;
+				if (genericDictionary.TryGetValue(propertyName, out value))
+				{
+					return value;
+				}
+				return null;
+			}
+
+			IDictionary dictionary = input as IDictionary;
+			if (dictionary != null)
+			{
+				return dictionary[propertyName];
+			}
+
+			IEnumerable enumerable = input as IEnumerable;
+			if (enumerable != null)
+			{
 				if (propertyName == "length")
 				{
-					// get array length
-					int count = 0;
-					using (var enumerator = input.ArrayItems().GetEnumerator())
+					ICollection collection = input as ICollection;
+					if (collection != null)
 					{
-						while (enumerator.MoveNext())
+						return collection.Count;
+					}
+
+					// count array length
+					int count = 0;
+					var enumerator = enumerable.GetEnumerator();
+					while (enumerator.MoveNext())
+					{
+						count++;
+					}
+					return count;
+				}
+
+				int index;
+				if (Int32.TryParse(propertyName, out index))
+				{
+					IList list = input as IList;
+					if (list != null)
+					{
+						return list[index];
+					}
+
+					// get array item at index
+					foreach (var item in enumerable)
+					{
+						index--;
+						if (index < 0)
 						{
-							count++;
+							return item;
 						}
 					}
-					return new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, count) };
-				}
-				else if (Int32.TryParse(propertyName, out index))
-				{
-					// get array item at index
-					var items = input.ArrayItems(i => (i == index));
-					foreach (var item in items)
-					{
-						return item;
-					}
-					return JbstView.EmptySequence;
+					return null;
 				}
 
 				// hmm...
-				return JbstView.EmptySequence;
+				return null;
 			}
 
-			return input.Property(new DataName(propertyName));
+			return null;
 		}
 
 		#endregion Supporting Methods

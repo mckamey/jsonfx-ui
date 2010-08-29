@@ -35,8 +35,6 @@ using System.Diagnostics;
 using JsonFx.Serialization;
 using Microsoft.Ajax.Utilities;
 
-using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
-
 namespace JsonFx.EcmaScript
 {
 	internal class EcmaScriptBuilder
@@ -233,7 +231,7 @@ namespace JsonFx.EcmaScript
 				{
 					case "data":
 					{
-						return this.VisitArgumentReference(expectedType, typeof(TokenSequence), memberNode.Name);
+						return this.VisitArgumentReference(expectedType, typeof(object), memberNode.Name);
 					}
 					case "index":
 					case "count":
@@ -252,17 +250,6 @@ namespace JsonFx.EcmaScript
 			if (root == null)
 			{
 				return null;
-			}
-
-			if (root.ExpressionType != typeof(TokenSequence))
-			{
-				// first convert expression to TokenSequence
-				root.Expression = new CodeMethodInvokeExpression(
-					new CodeMethodReferenceExpression(
-						new CodeThisReferenceExpression(),
-						"CoerceType",
-						new CodeTypeReference(typeof(TokenSequence))),
-					root.Expression);
 			}
 
 			return new ExpressionResult
@@ -329,28 +316,6 @@ namespace JsonFx.EcmaScript
 			if (right.ExpressionType == EmptyType)
 			{
 				// convert one object to the other type
-				right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
-				return (right.ExpressionType = left.ExpressionType);
-			}
-
-			if (left.ExpressionType == typeof(TokenSequence))
-			{
-				if (right.ExpressionType == typeof(TokenSequence))
-				{
-					// convert both token sequences to expected type
-					left.Expression = this.DeferredCoerceType(expectedType, left.Expression);
-					right.Expression = this.DeferredCoerceType(expectedType, right.Expression);
-					return expectedType;
-				}
-
-				// convert one token sequence to the other type
-				left.Expression = this.DeferredCoerceType(right.ExpressionType, left.Expression);
-				return (left.ExpressionType = right.ExpressionType);
-			}
-
-			if (right.ExpressionType == typeof(TokenSequence))
-			{
-				// convert one token sequence to the other type
 				right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
 				return (right.ExpressionType = left.ExpressionType);
 			}

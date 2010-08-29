@@ -41,8 +41,6 @@ using JsonFx.Model;
 using JsonFx.Serialization;
 using JsonFx.Utils;
 
-using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
-
 namespace JsonFx.Jbst
 {
 	/// <summary>
@@ -215,7 +213,7 @@ namespace JsonFx.Jbst
 			method.Name = methodName;
 			method.Attributes = MemberAttributes.Private;
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TextWriter), "writer"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TokenSequence), "data"));
+			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
 			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
 
