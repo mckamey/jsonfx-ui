@@ -36,8 +36,6 @@ using System.IO;
 using JsonFx.Model;
 using JsonFx.Serialization;
 
-using TokenSequence=System.Collections.Generic.IEnumerable<JsonFx.Serialization.Token<JsonFx.Model.ModelTokenType>>;
-
 namespace JsonFx.Jbst
 {
 	public abstract class JbstView
@@ -150,12 +148,8 @@ namespace JsonFx.Jbst
 		{
 			if (normalize)
 			{
-				var sequence = data as TokenSequence;
-				if (sequence == null)
-				{
-					// serialize to tokens
-					sequence = new ModelWalker(this.Settings).GetTokens(data);
-				}
+				// serialize to tokens
+				var sequence = new ModelWalker(this.Settings).GetTokens(data);
 
 				// hydrate back to normalized objects
 				DataReaderSettings settings = new DataReaderSettings(this.Settings.Resolver, this.Settings.Filters);
@@ -234,7 +228,18 @@ namespace JsonFx.Jbst
 				return null;
 			}
 
-			// primitives do not have properties?
+			if (input is string)
+			{
+				if (propertyName == "length")
+				{
+					return ((string)input).Length;
+				}
+
+				// Strings do not have other property names
+				return null;
+			}
+
+			// other primitives do not have properties
 			return null;
 		}
 
