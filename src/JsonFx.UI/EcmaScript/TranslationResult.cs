@@ -198,9 +198,9 @@ namespace JsonFx.EcmaScript
 				statement.Expression = new CodeMethodInvokeExpression(
 					new CodeMethodReferenceExpression(
 						new CodeThisReferenceExpression(),
-						"CoerceType",
+						"Coerce",
 						new CodeTypeReference(this.ResultType)),
-						expr);
+					expr);
 			}
 
 			if (hasReturn)

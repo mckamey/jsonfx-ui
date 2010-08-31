@@ -294,7 +294,7 @@ namespace JsonFx.EcmaScript
 			{
 				Expression = new CodeMethodInvokeExpression(
 					new CodeThisReferenceExpression(),
-					"GetProperty",
+					"Member",
 					root.Expression,
 					new CodePrimitiveExpression(memberNode.Name)),
 				ExpressionType = typeof(object)
@@ -437,7 +437,7 @@ namespace JsonFx.EcmaScript
 			return new CodeMethodInvokeExpression(
 				new CodeMethodReferenceExpression(
 					new CodeThisReferenceExpression(),
-					"CoerceType",
+					"Coerce",
 					new CodeTypeReference(targetType)),
 				expr);
 		}

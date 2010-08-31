@@ -183,7 +183,7 @@ namespace JsonFx.Jbst
 		/// <typeparam name="T"></typeparam>
 		/// <param name="value"></param>
 		/// <returns></returns>
-		protected T CoerceType<T>(object value)
+		protected T Coerce<T>(object value)
 		{
 			return this.Coercion.CoerceType<T>(value);
 		}
@@ -192,16 +192,16 @@ namespace JsonFx.Jbst
 		/// CodeGen glue
 		/// </summary>
 		/// <param name="input"></param>
-		/// <param name="propertyName"></param>
+		/// <param name="name"></param>
 		/// <returns></returns>
-		protected object GetProperty(object input, string propertyName)
+		protected object Member(object input, string name)
 		{
 			// normalized objects are always IDictionary<string, object>
 			IDictionary<string, object> genericDictionary = input as IDictionary<string, object>;
 			if (genericDictionary != null)
 			{
 				object value;
-				if (genericDictionary.TryGetValue(propertyName, out value))
+				if (genericDictionary.TryGetValue(name, out value))
 				{
 					return value;
 				}
@@ -212,30 +212,30 @@ namespace JsonFx.Jbst
 			IList list = input as IList;
 			if (list != null)
 			{
-				if (propertyName == "length")
+				if (name == "length")
 				{
 					return list.Count;
 				}
 
-				// try propertyName as an index
+				// try name as an index
 				int index;
-				if (Int32.TryParse(propertyName, out index))
+				if (Int32.TryParse(name, out index))
 				{
 					return list[index];
 				}
 
-				// Arrays do not have other property names
+				// Arrays do not have other properties
 				return null;
 			}
 
 			if (input is string)
 			{
-				if (propertyName == "length")
+				if (name == "length")
 				{
 					return ((string)input).Length;
 				}
 
-				// Strings do not have other property names
+				// Strings do not have other properties
 				return null;
 			}
 
