@@ -421,7 +421,12 @@ namespace JsonFx.Jbst
 
 		private CodeObject Translate<TResult>(CodeTypeDeclaration viewType, object expr)
 		{
-			TranslationResult result = new TranslationResult(typeof(TResult), String.Format(CodeBlockMethodFormat, this.counter))
+			TranslationResult result = new TranslationResult(
+				typeof(TResult),
+				String.Format(CodeBlockMethodFormat, this.counter),
+				new TranslationResult.ParamDefn(typeof(object), "data"),
+				new TranslationResult.ParamDefn(typeof(int), "index"),
+				new TranslationResult.ParamDefn(typeof(int), "count"))
 			{
 				Script = this.FormatExpression(expr)
 			};
@@ -473,7 +478,7 @@ namespace JsonFx.Jbst
 					return new CodeSnippetExpression(((CodeSnippetStatement)onlyLine).Value);
 				}
 
-				// for now, others remain as a complete method
+				// others will remain as a complete method
 			}
 
 			this.counter++;

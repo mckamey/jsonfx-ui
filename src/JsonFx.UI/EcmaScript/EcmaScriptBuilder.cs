@@ -33,6 +33,7 @@ using System.CodeDom;
 using System.Collections.Generic;
 using System.Diagnostics;
 
+using JsonFx.Jbst;
 using JsonFx.Serialization;
 using Microsoft.Ajax.Utilities;
 
@@ -51,6 +52,7 @@ namespace JsonFx.EcmaScript
 		private readonly TypeCoercionUtility Coercion;
 		private readonly CodeSettings CodeSettings;
 		private readonly string[] GlobalVars;
+		private IEnumerable<TranslationResult.ParamDefn> paramList;
 
 		#endregion Fields
 
@@ -91,7 +93,7 @@ namespace JsonFx.EcmaScript
 		{
 			if (String.IsNullOrEmpty(result.Script))
 			{
-				// technically undefined
+				// empty result
 				return;
 			}
 
@@ -101,7 +103,8 @@ namespace JsonFx.EcmaScript
 			try
 			{
 				block = parser.Parse(this.CodeSettings);
-				// fix a bug in code generation
+
+				// fix a bug in AjaxMin
 				result.Script = block.ToCode(ToCodeFormat.Normal).Replace("function ((){", "function(){");
 			}
 #if DEBUG
@@ -122,6 +125,8 @@ namespace JsonFx.EcmaScript
 				return;
 			}
 
+			this.paramList = result.ParamList;
+
 			bool needsReturn;
 			if (block.Count == 1 && block[0] is FunctionObject)
 			{
@@ -138,6 +143,7 @@ namespace JsonFx.EcmaScript
 			{
 				// block not yet supported
 				result.IsClientOnly = true;
+				this.paramList = null;
 				return;
 			}
 
@@ -147,11 +153,13 @@ namespace JsonFx.EcmaScript
 				{
 					// block not yet supported
 					result.IsClientOnly = true;
+					this.paramList = null;
 					return;
 				}
 			}
 
 			result.EnsureReturnType(needsReturn);
+			this.paramList = null;
 		}
 
 		private ExpressionResult Visit(AstNode node, Type expectedType)
@@ -203,7 +211,7 @@ namespace JsonFx.EcmaScript
 				return new ExpressionResult
 				{
 					Expression = new CodeThisReferenceExpression(),
-					ExpressionType = typeof(object) // TODO: get real JBST type
+					ExpressionType = typeof(JbstView) // TODO: get real JBST type
 				};
 			}
 
@@ -273,25 +281,17 @@ namespace JsonFx.EcmaScript
 		{
 			if (memberNode.Root is ThisLiteral)
 			{
-				// TODO: pass parameter list as property on TranslationResult
-				// these are remapped to method args
-				switch (memberNode.Name)
+				// these are remapped to corresponding method args
+				foreach (var param in this.paramList)
 				{
-					case "data":
+					if (StringComparer.Ordinal.Equals(param.Name, memberNode.Name))
 					{
-						return this.VisitArgumentReference(expectedType, typeof(object), memberNode.Name);
-					}
-					case "index":
-					case "count":
-					{
-						return this.VisitArgumentReference(expectedType, typeof(int), memberNode.Name);
-					}
-					default:
-					{
-						// not yet supported
-						return null;
+						return this.VisitArgumentReference(expectedType, param.Type, memberNode.Name);
 					}
 				}
+
+				// not yet supported
+				return null;
 			}
 
 			ExpressionResult root = this.Visit(memberNode.Root, expectedType);

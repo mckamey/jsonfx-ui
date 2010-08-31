@@ -36,10 +36,40 @@ namespace JsonFx.EcmaScript
 {
 	internal class TranslationResult
 	{
+		#region ParamDefn
+
+		public struct ParamDefn
+		{
+			#region Fields
+
+			public readonly string Name;
+			public readonly Type Type;
+
+			#endregion Fields
+
+			#region Init
+
+			/// <summary>
+			/// Ctor
+			/// </summary>
+			/// <param name="type"></param>
+			/// <param name="name"></param>
+			public ParamDefn(Type type, string name)
+			{
+				this.Type = type;
+				this.Name = name;
+			}
+
+			#endregion Init
+		}
+
+		#endregion ParamDefn
+
 		#region Fields
 
 		public readonly Type ResultType;
 		public readonly IList<CodeMemberMethod> Methods = new List<CodeMemberMethod>();
+		public readonly IEnumerable<ParamDefn> ParamList;
 
 		#endregion Fields
 
@@ -50,18 +80,22 @@ namespace JsonFx.EcmaScript
 		/// </summary>
 		/// <param name="resultType"></param>
 		/// <param name="methodName"></param>
-		public TranslationResult(Type resultType, string methodName)
+		public TranslationResult(
+			Type resultType,
+			string methodName,
+			params ParamDefn[] paramList)
 		{
 			this.ResultType = resultType;
+			this.ParamList = paramList;
 
 			var method = new CodeMemberMethod();
 
 			method.Name = methodName;
 
-			// TODO: pass parameter list as property on TranslationResult
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
+			foreach (var param in paramList)
+			{
+				method.Parameters.Add(new CodeParameterDeclarationExpression(param.Type, param.Name));
+			}
 
 			this.Methods.Add(method);
 		}
@@ -75,7 +109,7 @@ namespace JsonFx.EcmaScript
 		public string Script { get; set; }
 
 		/// <summary>
-		/// Gets a quick view of the complexity of the result
+		/// Gets a quick heuristic of the complexity of the result
 		/// </summary>
 		public int LineCount
 		{
@@ -171,12 +205,18 @@ namespace JsonFx.EcmaScript
 				CodeExpression expr = statement.Expression;
 				if (expr is CodeArgumentReferenceExpression)
 				{
-					// TODO: pass parameter list as property on TranslationResult
 					string paramName = ((CodeArgumentReferenceExpression)expr).ParameterName;
-					if (((paramName == "index") || (paramName == "count")) &&
-						this.ResultType.IsAssignableFrom(typeof(int)))
+
+					foreach (ParamDefn param in this.ParamList)
 					{
-						needsCoercion = false;
+						if (StringComparer.Ordinal.Equals(param.Name, paramName))
+						{
+							if (this.ResultType.IsAssignableFrom(param.Type))
+							{
+								needsCoercion = false;
+							}
+							break;
+						}
 					}
 				}
 				else if (expr is CodePrimitiveExpression)
