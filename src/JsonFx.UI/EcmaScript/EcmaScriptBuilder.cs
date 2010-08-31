@@ -101,7 +101,8 @@ namespace JsonFx.EcmaScript
 			try
 			{
 				block = parser.Parse(this.CodeSettings);
-				result.Script = block.ToCode(ToCodeFormat.Normal);
+				// fix a bug in code generation
+				result.Script = block.ToCode(ToCodeFormat.Normal).Replace("function ((){", "function(){");
 			}
 #if DEBUG
 			catch (Exception ex)
@@ -135,6 +136,7 @@ namespace JsonFx.EcmaScript
 			var children = this.VisitBlock(block, result.ResultType);
 			if (children == null)
 			{
+				// block not yet supported
 				result.IsClientOnly = true;
 				return;
 			}
@@ -143,7 +145,7 @@ namespace JsonFx.EcmaScript
 			{
 				if (!result.AddResult(child))
 				{
-					// not yet supported
+					// block not yet supported
 					result.IsClientOnly = true;
 					return;
 				}
@@ -176,6 +178,14 @@ namespace JsonFx.EcmaScript
 			ReturnNode returnNode = node as ReturnNode;
 			if (returnNode != null)
 			{
+				if (returnNode.Operand == null)
+				{
+					return new ExpressionResult
+					{
+						Statement = new CodeMethodReturnStatement()
+					};
+				}
+
 				ExpressionResult code = this.Visit(returnNode.Operand, expectedType);
 				if (code == null || code.Expression == null)
 				{

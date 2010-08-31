@@ -53,7 +53,9 @@ namespace JsonFx.Jbst
 		private const string TemplateMethodFormat = "T_{0:x4}";
 		private const string CodeBlockMethodFormat = "B_{0:x4}";
 		private const string LocalVarFormat = "{0}_{1:x}";
+
 		private static readonly object Key_VarCount = new object();
+		private static readonly object Key_EmptyBody = new object();
 
 		#endregion Constants
 
@@ -244,14 +246,18 @@ namespace JsonFx.Jbst
 				case JbstCommandType.UnparsedBlock:
 				case JbstCommandType.StatementBlock:
 				{
-					CodeExpression expr = this.Translate(viewType, command);
-					if (expr == null)
+					CodeObject code = this.Translate(viewType, command);
+					if (code is CodeExpression)
 					{
-						this.BuildClientExecution(command, method);
+						this.EmitExpression((CodeExpression)code, method);
 					}
-					else
+					else if (code is CodeStatement)
 					{
-						this.EmitExpression(expr, method);
+						method.Statements.Add((CodeStatement)code);
+					}
+					else if (code is CodeMemberMethod)
+					{
+						method.Statements.AddRange(((CodeMemberMethod)code).Statements);
 					}
 					return;
 				}
@@ -308,18 +314,18 @@ namespace JsonFx.Jbst
 				}
 				else
 				{
-					nameCode = this.Translate(viewType, nameExpr);
+					nameCode = this.Translate(viewType, nameExpr) as CodeExpression;
 				}
 			}
 			else
 			{
-				nameCode = this.Translate(viewType, nameExpr);
+				nameCode = this.Translate(viewType, nameExpr) as CodeExpression;
 			}
 
 			CodeExpression dataCode, indexCode, countCode;
 			this.ProcessArgs(viewType, dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
 
-			if (dataCode == null || indexCode == null || countCode == null)
+			if (nameCode == null || dataCode == null || indexCode == null || countCode == null)
 			{
 				// force into client mode
 				this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr, method);
@@ -342,9 +348,9 @@ namespace JsonFx.Jbst
 
 		private void ProcessArgs(CodeTypeDeclaration viewType, object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
 		{
-			dataCode = this.Translate(viewType, dataExpr);
-			indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) : null;
-			countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) : null;
+			dataCode = this.Translate(viewType, dataExpr) as CodeExpression;
+			indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) as CodeExpression : null;
+			countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) as CodeExpression : null;
 
 			if (dataCode is CodeDefaultValueExpression)
 			{
@@ -408,12 +414,12 @@ namespace JsonFx.Jbst
 			this.EmitMarkup(");</script>", method);
 		}
 
-		public CodeExpression Translate(CodeTypeDeclaration viewType, object expr)
+		public CodeObject Translate(CodeTypeDeclaration viewType, object expr)
 		{
 			return this.Translate<object>(viewType, expr);
 		}
 
-		private CodeExpression Translate<TResult>(CodeTypeDeclaration viewType, object expr)
+		private CodeObject Translate<TResult>(CodeTypeDeclaration viewType, object expr)
 		{
 			TranslationResult result = new TranslationResult(typeof(TResult), String.Format(CodeBlockMethodFormat, this.counter))
 			{
@@ -423,25 +429,36 @@ namespace JsonFx.Jbst
 			this.JSBuilder.Translate(result);
 			if (result.IsClientOnly)
 			{
-				// not yet supported
-				return null;
+				// not yet supported on server-side
+				return this.BuildClientExecution(result);
 			}
 
 			int lineCount = result.LineCount;
 			if (lineCount < 1)
 			{
 				// no method body, return default value of expected type
-				return new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+				var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+				defValue.UserData[Key_EmptyBody] = result.Script;
+				return defValue;
 			}
 
 			if (lineCount == 1)
 			{
 				var onlyLine = result.Methods[0].Statements[0];
 
-				if (onlyLine is CodeMethodReturnStatement)
+				CodeMethodReturnStatement rs = onlyLine as CodeMethodReturnStatement;
+				if (rs != null)
 				{
+					if (rs.Expression == null)
+					{
+						// no method body, return default value of expected type
+						var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+						defValue.UserData[Key_EmptyBody] = result.Script;
+						return defValue;
+					}
+
 					// unwrap return expression
-					return ((CodeMethodReturnStatement)onlyLine).Expression;
+					return rs.Expression;
 				}
 
 				if (onlyLine is CodeExpressionStatement)
@@ -485,7 +502,7 @@ namespace JsonFx.Jbst
 			if (argument is string)
 			{
 				// directly use as inline expression
-				return ((string)argument);
+				argument = new JbstExpressionBlock((string)argument);
 			}
 
 			JbstCommand command = argument as JbstCommand;
@@ -501,22 +518,13 @@ namespace JsonFx.Jbst
 				}
 			}
 
-			// convert to token sequence and allow formatter to emit as primitive
+			// convert to token sequence and allow formatter to emit as JS primitive
 			return this.JSFormatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, argument) });
 		}
 
-		private void BuildClientExecution(JbstCommand command, CodeMemberMethod method)
+		private CodeObject BuildClientExecution(TranslationResult result)
 		{
-			string code;
-			using (var writer = new StringWriter())
-			{
-				command.Format(null, writer);
-				code = writer.GetStringBuilder().ToString();
-			}
-
-			this.EmitMarkup(
-				String.Concat("<script type=\"text/javascript\">", Environment.NewLine, code, Environment.NewLine, "</script>"),
-				method);
+			return new CodePrimitiveExpression(result.Script);
 		}
 
 		private void BuildBindAdapterCall(CodeTypeDeclaration viewType, string methodName, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method, bool normalize)
@@ -588,6 +596,15 @@ namespace JsonFx.Jbst
 		{
 			if (expr == null)
 			{
+				return;
+			}
+
+			CodeDefaultValueExpression defValue = expr as CodeDefaultValueExpression;
+			if (defValue != null &&
+				defValue.UserData[Key_EmptyBody] != null)
+			{
+				// empty method body, emit comment
+				method.Statements.Add(new CodeCommentStatement(String.Concat("Empty block: ", defValue.UserData[Key_EmptyBody] as string)));
 				return;
 			}
 
