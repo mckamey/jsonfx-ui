@@ -30,10 +30,7 @@
 
 using System;
 using System.CodeDom;
-using System.Diagnostics;
-
-using JsonFx.Serialization;
-using Microsoft.Ajax.Utilities;
+using System.Collections.Generic;
 
 namespace JsonFx.EcmaScript
 {
@@ -42,7 +39,7 @@ namespace JsonFx.EcmaScript
 		#region Fields
 
 		public readonly Type ResultType;
-		public readonly CodeMemberMethod Method = new CodeMemberMethod();
+		public readonly IList<CodeMemberMethod> Methods = new List<CodeMemberMethod>();
 
 		#endregion Fields
 
@@ -57,14 +54,16 @@ namespace JsonFx.EcmaScript
 		{
 			this.ResultType = resultType;
 
-			this.Method = new CodeMemberMethod
-				{
-					Name = methodName
-				};
+			var method = new CodeMemberMethod();
 
-			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
-			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
-			this.Method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
+			method.Name = methodName;
+
+			// TODO: pass parameter list as property on TranslationResult
+			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
+			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
+			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
+
+			this.Methods.Add(method);
 		}
 
 		#endregion Init
@@ -75,9 +74,20 @@ namespace JsonFx.EcmaScript
 
 		public string Script { get; set; }
 
+		/// <summary>
+		/// Gets a quick view of the complexity of the result
+		/// </summary>
 		public int LineCount
 		{
-			get { return this.Method.Statements.Count; }
+			get
+			{
+				int count = 0;
+				foreach (var method in this.Methods)
+				{
+					count += method.Statements.Count;
+				}
+				return count;
+			}
 		}
 
 		#endregion Properties
@@ -89,66 +99,84 @@ namespace JsonFx.EcmaScript
 		/// </summary>
 		/// <param name="code"></param>
 		/// <returns>true if recognized, false if type was not supported</returns>
-		public bool AddStatement(ExpressionResult expr)
+		public bool AddResult(ExpressionResult expr)
 		{
 			if (expr == null)
 			{
 				return false;
 			}
 
+			bool valid = false;
+
 			if (expr.Expression != null)
 			{
-				this.Method.Statements.Add(expr.Expression);
-				return true;
+				this.Methods[0].Statements.Add(expr.Expression);
+				valid = true;
 			}
-
-			if (expr.Statement != null)
+			else if (expr.Statement != null)
 			{
-				this.Method.Statements.Add(expr.Statement);
-				return true;
+				this.Methods[0].Statements.Add(expr.Statement);
+				valid = true;
+			}
+			
+			if (expr.Method != null)
+			{
+				this.Methods.Add(expr.Method);
+				valid = true;
 			}
 
-			return false;
+			return valid;
 		}
 
-		public void TranslationComplete()
+		/// <summary>
+		/// Ensures return type is correct and set if needed.
+		/// </summary>
+		public void EnsureReturnType(bool addReturn)
 		{
-			var index = this.Method.Statements.Count-1;
-			if (index < 0)
+			if (this.ResultType == typeof(object))
 			{
+				// no coercion needed
 				return;
 			}
 
-			// extract expression
-			CodeExpression expr;
-			if (this.Method.Statements[index] is CodeExpressionStatement)
+			bool hasReturn = false;
+			for (int i=0, length=this.Methods[0].Statements.Count; i<length; i++)
 			{
-				CodeExpressionStatement statement = (CodeExpressionStatement)this.Method.Statements[index];
-				expr = statement.Expression;
-			}
-			else if (this.Method.Statements[index] is CodeMethodReturnStatement)
-			{
-				CodeMethodReturnStatement statement = (CodeMethodReturnStatement)this.Method.Statements[index];
-				expr = statement.Expression;
-			}
-			else
-			{
-				// bail.
-				return;
-			}
+				CodeMethodReturnStatement statement;
 
-			bool needsCoercion = (this.ResultType != typeof(object));
-			if (needsCoercion)
-			{
+				if (addReturn && (i+1 == length))
+				{
+					CodeExpressionStatement last = this.Methods[0].Statements[i] as CodeExpressionStatement;
+					if (last == null)
+					{
+						continue;
+					}
+
+					// convert last expression to a return statement
+					this.Methods[0].Statements[i]  = statement = new CodeMethodReturnStatement(last.Expression);
+				}
+				else
+				{
+					statement = this.Methods[0].Statements[i] as CodeMethodReturnStatement;
+				}
+				if (statement == null)
+				{
+					continue;
+				}
+
+				hasReturn = true;
+				bool needsCoercion = true;
+
+				// extract expression
+				CodeExpression expr = statement.Expression;
 				if (expr is CodeArgumentReferenceExpression)
 				{
+					// TODO: pass parameter list as property on TranslationResult
 					string paramName = ((CodeArgumentReferenceExpression)expr).ParameterName;
-					if ((paramName == "index") || (paramName == "count"))
+					if (((paramName == "index") || (paramName == "count")) &&
+						this.ResultType.IsAssignableFrom(typeof(int)))
 					{
-						if (this.ResultType.IsAssignableFrom(typeof(int)))
-						{
-							needsCoercion = false;
-						}
+						needsCoercion = false;
 					}
 				}
 				else if (expr is CodePrimitiveExpression)
@@ -161,26 +189,25 @@ namespace JsonFx.EcmaScript
 					}
 				}
 
-				if (needsCoercion)
+				if (!needsCoercion)
 				{
-					expr = this.WrapWithCoercion(this.ResultType, expr);
+					continue;
 				}
+
+				// wrap expression with type coercion call
+				statement.Expression = new CodeMethodInvokeExpression(
+					new CodeMethodReferenceExpression(
+						new CodeThisReferenceExpression(),
+						"CoerceType",
+						new CodeTypeReference(this.ResultType)),
+						expr);
 			}
 
-			// convert expression statement to return statement
-			this.Method.Statements[index] = new CodeMethodReturnStatement(expr);
-			this.Method.ReturnType = new CodeTypeReference(this.ResultType);
-		}
-
-		private CodeExpression WrapWithCoercion(Type type, CodeExpression expr)
-		{
-			// wrap expression in a coercion call before return
-			return new CodeMethodInvokeExpression(
-				new CodeMethodReferenceExpression(
-					new CodeThisReferenceExpression(),
-					"CoerceType",
-					new CodeTypeReference(type)),
-				expr);
+			if (hasReturn)
+			{
+				// only set return type if actually had a return statement
+				this.Methods[0].ReturnType = new CodeTypeReference(this.ResultType);
+			}
 		}
 
 		#endregion Methods

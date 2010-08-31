@@ -38,6 +38,15 @@ namespace JsonFx.EcmaScript
 		#region Properties
 
 		/// <summary>
+		/// Additive to <see cref="Expression"/> or <see cref="Statement"/>
+		/// </summary>
+		public CodeMemberMethod Method
+		{
+			get;
+			set;
+		}
+
+		/// <summary>
 		/// Mutually exclusive with <see cref="Expression"/>
 		/// </summary>
 		public CodeStatement Statement

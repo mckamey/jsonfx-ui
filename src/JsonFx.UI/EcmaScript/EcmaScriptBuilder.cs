@@ -30,6 +30,7 @@
 
 using System;
 using System.CodeDom;
+using System.Collections.Generic;
 using System.Diagnostics;
 
 using JsonFx.Serialization;
@@ -114,10 +115,33 @@ namespace JsonFx.EcmaScript
 				return;
 			}
 
-			foreach (var node in block.Children)
+			if (block.Count < 1)
 			{
-				ExpressionResult expr = this.Visit(node, result.ResultType);
-				if (!result.AddStatement(expr))
+				// empty result
+				return;
+			}
+
+			bool needsReturn;
+			if (block.Count == 1 && block[0] is FunctionObject)
+			{
+				block = ((FunctionObject)block[0]).Body;
+				needsReturn = false;
+			}
+			else
+			{
+				needsReturn = true;
+			}
+
+			var children = this.VisitBlock(block, result.ResultType);
+			if (children == null)
+			{
+				result.IsClientOnly = true;
+				return;
+			}
+
+			foreach (var child in children)
+			{
+				if (!result.AddResult(child))
 				{
 					// not yet supported
 					result.IsClientOnly = true;
@@ -125,7 +149,7 @@ namespace JsonFx.EcmaScript
 				}
 			}
 
-			result.TranslationComplete();
+			result.EnsureReturnType(needsReturn);
 		}
 
 		private ExpressionResult Visit(AstNode node, Type expectedType)
@@ -192,6 +216,18 @@ namespace JsonFx.EcmaScript
 			return null;
 		}
 
+		private IEnumerable<ExpressionResult> VisitBlock(Block block, Type expectedType)
+		{
+			List<ExpressionResult> results = new List<ExpressionResult>(block.Count);
+			foreach (var node in block.Children)
+			{
+				ExpressionResult expr = this.Visit(node, expectedType);
+				results.Add(expr);
+			}
+
+			return results;
+		}
+
 		private ExpressionResult VisitConstantWrapper(ConstantWrapper constantWrapper, Type expectedType)
 		{
 			CodeExpression expr;
@@ -227,6 +263,8 @@ namespace JsonFx.EcmaScript
 		{
 			if (memberNode.Root is ThisLiteral)
 			{
+				// TODO: pass parameter list as property on TranslationResult
+				// these are remapped to method args
 				switch (memberNode.Name)
 				{
 					case "data":

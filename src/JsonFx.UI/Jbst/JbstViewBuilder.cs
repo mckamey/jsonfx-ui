@@ -240,9 +240,19 @@ namespace JsonFx.Jbst
 		{
 			switch (command.CommandType)
 			{
-				case JbstCommandType.DeclarationBlock:
+				case JbstCommandType.ExpressionBlock:
+				case JbstCommandType.UnparsedBlock:
+				case JbstCommandType.StatementBlock:
 				{
-					// nothing emitted on the server
+					CodeExpression expr = this.Translate(viewType, command);
+					if (expr == null)
+					{
+						this.BuildClientExecution(command, method);
+					}
+					else
+					{
+						this.EmitExpression(expr, method);
+					}
 					return;
 				}
 				case JbstCommandType.TemplateReference:
@@ -258,6 +268,11 @@ namespace JsonFx.Jbst
 					this.BuildBindAdapterCall(viewType, childMethod, inline.DataExpr, inline.IndexExpr, inline.CountExpr, method, false);
 					return;
 				}
+				case JbstCommandType.Placeholder:
+				{
+					// TODO
+					return;
+				}
 				case JbstCommandType.CommentBlock:
 				{
 					JbstCommentBlock comment = (JbstCommentBlock)command;
@@ -266,19 +281,9 @@ namespace JsonFx.Jbst
 						method);
 					return;
 				}
-				case JbstCommandType.ExpressionBlock:
-				case JbstCommandType.UnparsedBlock:
-				case JbstCommandType.StatementBlock:
+				case JbstCommandType.DeclarationBlock:
 				{
-					CodeExpression expr = this.Translate(viewType, command);
-					if (expr == null)
-					{
-						this.BuildClientExecution(command, method);
-					}
-					else
-					{
-						this.EmitExpression(expr, method);
-					}
+					// these have been compiled away
 					return;
 				}
 				default:
@@ -431,7 +436,7 @@ namespace JsonFx.Jbst
 
 			if (lineCount == 1)
 			{
-				var onlyLine = result.Method.Statements[0];
+				var onlyLine = result.Methods[0].Statements[0];
 
 				if (onlyLine is CodeMethodReturnStatement)
 				{
@@ -455,12 +460,16 @@ namespace JsonFx.Jbst
 			}
 
 			this.counter++;
-			viewType.Members.Add(result.Method);
+
+			foreach (var method in result.Methods)
+			{
+				viewType.Members.Add(method);
+			}
 
 			// return an invokable expression
 			return new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
-				result.Method.Name,
+				result.Methods[0].Name,
 				new CodeArgumentReferenceExpression("data"),
 				new CodeArgumentReferenceExpression("index"),
 				new CodeArgumentReferenceExpression("count"));
@@ -479,10 +488,17 @@ namespace JsonFx.Jbst
 				return ((string)argument);
 			}
 
-			JbstCodeBlock block = argument as JbstCodeBlock;
-			if (block != null)
+			JbstCommand command = argument as JbstCommand;
+			if (command != null)
 			{
-				return block.Code;
+				//return block.Code;
+
+				string code;
+				using (var writer = new StringWriter())
+				{
+					command.Format(null, writer);
+					code = writer.GetStringBuilder().ToString();
+				}
 			}
 
 			// convert to token sequence and allow formatter to emit as primitive
