@@ -97,15 +97,13 @@ namespace JsonFx.EcmaScript
 				return;
 			}
 
-			JSParser parser = new JSParser(result.Script, this.GlobalVars);
+			JSParser parser = new JSParser(String.Concat('(', result.Script, ')'), this.GlobalVars);
 			parser.CompilerError += new EventHandler<JScriptExceptionEventArgs>(this.OnCompilerError);
 			Block block;
 			try
 			{
 				block = parser.Parse(this.CodeSettings);
-
-				// fix a bug in AjaxMin
-				result.Script = block.ToCode(ToCodeFormat.Normal).Replace("function ((){", "function(){");
+				result.Script = block.ToCode(ToCodeFormat.Normal);
 			}
 #if DEBUG
 			catch (Exception ex)
@@ -532,7 +530,9 @@ namespace JsonFx.EcmaScript
 		{
 			JScriptException exception = e.Exception;
 
-			// TODO: report JavaScript error
+			// TODO: properly report JavaScript error
+
+			Trace.WriteLine(e.Exception);
 		}
 
 		#endregion Methods
