@@ -153,8 +153,10 @@ namespace JsonFx.Jbst
 			ctor = new CodeConstructor();
 			ctor.Attributes = MemberAttributes.Public;
 			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(DataWriterSettings), "settings"));
+			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(IClientIDStrategy), "clientID"));
 
 			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
+			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("clientID"));
 
 			viewType.Members.Add(ctor);
 
@@ -310,7 +312,10 @@ namespace JsonFx.Jbst
 				string name = (string)nameExpr;
 				if (EcmaScriptIdentifier.IsValidIdentifier(name, true))
 				{
-					nameCode = new CodeObjectCreateExpression(name, new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings"));
+					nameCode = new CodeObjectCreateExpression(
+						name,
+						new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings"),
+						new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "ClientID"));
 				}
 				else
 				{
@@ -371,7 +376,7 @@ namespace JsonFx.Jbst
 
 		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
-			string varID = this.GenerateNewIDVar(method, "id");
+			string varID = this.GenerateClientIDVar(method);
 
 			this.EmitMarkup("<noscript id=\"", method);
 			this.EmitVarValue(varID, method);
@@ -392,7 +397,7 @@ namespace JsonFx.Jbst
 
 		private void BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
 		{
-			string varID = this.GenerateNewIDVar(method, "id");
+			string varID = this.GenerateClientIDVar(method);
 
 			this.EmitMarkup("<div id=\"", method);
 			this.EmitVarValue(varID, method);
@@ -642,20 +647,19 @@ namespace JsonFx.Jbst
 			#endregion TVar prefix_X;
 		}
 
-		private string GenerateNewIDVar(CodeMemberMethod method, string prefix)
+		private string GenerateClientIDVar(CodeMemberMethod method)
 		{
-			#region string prefix_XXXX = String.Format("_{0:n}", Guid.NewGuid());
+			#region string id_XXXX = this.NewID();
 
-			var newLoc = this.AllocateLocalVar<string>(method, prefix);
+			var newLoc = this.AllocateLocalVar<string>(method, "id");
 
 			newLoc.InitExpression = new CodeMethodInvokeExpression(
-				new CodeTypeReferenceExpression(typeof(String)), "Format",
-				new CodePrimitiveExpression("_{0:n}"),
-				new CodeMethodInvokeExpression(new CodeTypeReferenceExpression(typeof(Guid)), "NewGuid"));
+				new CodeThisReferenceExpression(),
+				"NewID");
 
 			return newLoc.Name;
 
-			#endregion string prefix_XXXX = String.Format("_{0:n}", Guid.NewGuid());
+			#endregion string id_XXXX = this.NewID();
 		}
 
 		#endregion Methods

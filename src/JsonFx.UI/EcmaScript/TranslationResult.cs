@@ -228,19 +228,21 @@ namespace JsonFx.EcmaScript
 						needsCoercion = false;
 					}
 				}
-
-				if (!needsCoercion)
+				else
 				{
-					continue;
+					needsCoercion = false;
 				}
 
-				// wrap expression with type coercion call
-				statement.Expression = new CodeMethodInvokeExpression(
-					new CodeMethodReferenceExpression(
-						new CodeThisReferenceExpression(),
-						"Coerce",
-						new CodeTypeReference(this.ResultType)),
-					expr);
+				if (needsCoercion)
+				{
+					// wrap expression with type coercion call
+					statement.Expression = new CodeMethodInvokeExpression(
+						new CodeMethodReferenceExpression(
+							new CodeThisReferenceExpression(),
+							"Coerce",
+							new CodeTypeReference(this.ResultType)),
+						expr);
+				}
 			}
 
 			if (hasReturn)

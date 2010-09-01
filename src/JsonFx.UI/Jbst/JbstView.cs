@@ -56,8 +56,9 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
-		protected readonly DataWriterSettings Settings;
 		private readonly TypeCoercionUtility Coercion;
+		protected readonly DataWriterSettings Settings;
+		protected readonly IClientIDStrategy ClientID;
 
 		#endregion Fields
 
@@ -67,7 +68,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		protected JbstView()
-			: this(new DataWriterSettings())
+			: this(new DataWriterSettings(), new GuidClientIDStrategy())
 		{
 		}
 
@@ -75,10 +76,20 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="settings"></param>
-		protected JbstView(DataWriterSettings settings)
+		protected JbstView(DataWriterSettings settings, IClientIDStrategy clientID)
 		{
+			if (settings == null)
+			{
+				throw new ArgumentNullException("settings");
+			}
+			if (settings == null)
+			{
+				throw new ArgumentNullException("clientID");
+			}
+
 			this.Settings = settings;
 			this.Coercion = new TypeCoercionUtility(settings, true);
+			this.ClientID = clientID;
 		}
 
 		#endregion Init
@@ -241,6 +252,15 @@ namespace JsonFx.Jbst
 
 			// other primitives do not have properties
 			return null;
+		}
+
+		/// <summary>
+		/// CodeGen
+		/// </summary>
+		/// <returns></returns>
+		protected string NewID()
+		{
+			return this.ClientID.NextID();
 		}
 
 		#endregion Supporting Methods
