@@ -33,12 +33,12 @@ using System;
 namespace JsonFx.Jbst
 {
 	/// <summary>
-	/// Determines if markup should be generated for JBST data
+	/// Allows forcing the template to client-only or server-only.
 	/// </summary>
-	internal enum AutoMarkupType
+	public enum EngineType
 	{
 		Auto,
-		None,
-		Data
+		Client,
+		Server
 	}
 }

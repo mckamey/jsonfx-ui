@@ -124,7 +124,7 @@ namespace JsonFx.Jbst
 			set;
 		}
 
-		public AutoMarkupType AutoMarkup
+		public EngineType Engine
 		{
 			get;
 			set;

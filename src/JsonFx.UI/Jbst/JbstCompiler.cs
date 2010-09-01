@@ -697,15 +697,15 @@ namespace JsonFx.Jbst
 						state.JbstName = EcmaScriptIdentifier.VerifyIdentifier(token.ValueAsString(), true);
 						break;
 					}
-					case "automarkup":
+					case "engine":
 					{
 						try
 						{
-							state.AutoMarkup = (AutoMarkupType)Enum.Parse(typeof(AutoMarkupType), token.ValueAsString(), true);
+							state.Engine = (EngineType)Enum.Parse(typeof(EngineType), token.ValueAsString(), true);
 						}
 						catch (Exception ex)
 						{
-							throw new TokenException<MarkupTokenType>(token, "\""+token.ValueAsString()+"\" is an invalid value for AutoMarkup.", ex);
+							throw new TokenException<MarkupTokenType>(token, "\""+token.ValueAsString()+"\" is an invalid value for EngineType", ex);
 						}
 						break;
 					}
