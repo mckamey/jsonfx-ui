@@ -76,6 +76,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="settings"></param>
+		/// <param name="clientID"></param>
 		protected JbstView(DataWriterSettings settings, IClientIDStrategy clientID)
 		{
 			if (settings == null)
@@ -87,10 +88,32 @@ namespace JsonFx.Jbst
 				throw new ArgumentNullException("clientID");
 			}
 
+			this.ClientID = clientID;
 			this.Settings = settings;
 			this.Coercion = new TypeCoercionUtility(settings, true);
-			this.ClientID = clientID;
+
+			this.Init();
 		}
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="view"></param>
+		protected JbstView(JbstView view)
+		{
+			if (view == null)
+			{
+				throw new ArgumentNullException("view");
+			}
+
+			this.ClientID = view.ClientID;
+			this.Settings = view.Settings;
+			this.Coercion = view.Coercion;
+
+			this.Init();
+		}
+
+		protected abstract void Init();
 
 		#endregion Init
 
@@ -127,7 +150,7 @@ namespace JsonFx.Jbst
 			this.Bind(this.Root, writer, data, index, count, true);
 		}
 
-		protected internal abstract void Root(TextWriter writer, object data, int index, int count);
+		protected abstract void Root(TextWriter writer, object data, int index, int count);
 
 		#endregion Bind Methods
 

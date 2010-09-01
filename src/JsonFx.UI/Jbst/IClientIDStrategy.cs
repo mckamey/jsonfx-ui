@@ -103,7 +103,7 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		public IncClientIDStrategy()
-			: this("T_")
+			: this("_")
 		{
 		}
 
@@ -125,7 +125,7 @@ namespace JsonFx.Jbst
 		/// <returns></returns>
 		public string NextID()
 		{
-			return String.Concat(this.Prefix, (this.counter++).ToString("0000"));
+			return String.Concat(this.Prefix, this.counter++);
 		}
 
 		#endregion IUniqueIDStrategy Members

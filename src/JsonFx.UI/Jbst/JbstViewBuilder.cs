@@ -52,6 +52,7 @@ namespace JsonFx.Jbst
 
 		private const string TemplateMethodFormat = "T_{0:x4}";
 		private const string CodeBlockMethodFormat = "B_{0:x4}";
+		private const string FieldFormat = "{0}_{1:x}";
 		private const string LocalVarFormat = "{0}_{1:x}";
 
 		private static readonly object Key_VarCount = new object();
@@ -144,7 +145,7 @@ namespace JsonFx.Jbst
 
 			#endregion [BuildPath(virtualPath)]
 
-			#region Constructors
+			#region Init
 
 			CodeConstructor ctor = new CodeConstructor();
 			ctor.Attributes = MemberAttributes.Public;
@@ -152,15 +153,24 @@ namespace JsonFx.Jbst
 
 			ctor = new CodeConstructor();
 			ctor.Attributes = MemberAttributes.Public;
-			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(DataWriterSettings), "settings"));
-			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(IClientIDStrategy), "clientID"));
-
-			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
-			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("clientID"));
-
+			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(JbstView), "view"));
+			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("view"));
 			viewType.Members.Add(ctor);
 
-			#endregion Constructors
+			ctor = new CodeConstructor();
+			ctor.Attributes = MemberAttributes.Public;
+			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(DataWriterSettings), "settings"));
+			ctor.Parameters.Add(new CodeParameterDeclarationExpression(typeof(IClientIDStrategy), "clientID"));
+			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("settings"));
+			ctor.BaseConstructorArgs.Add(new CodeArgumentReferenceExpression("clientID"));
+			viewType.Members.Add(ctor);
+
+			CodeMemberMethod init = new CodeMemberMethod();
+			init.Name = "Init";
+			init.Attributes = MemberAttributes.Family|MemberAttributes.Override;
+			viewType.Members.Add(init);
+
+			#endregion Init
 
 			// build control tree
 			this.BuildTemplate(state, viewType, true);
@@ -312,10 +322,7 @@ namespace JsonFx.Jbst
 				string name = (string)nameExpr;
 				if (EcmaScriptIdentifier.IsValidIdentifier(name, true))
 				{
-					nameCode = new CodeObjectCreateExpression(
-						name,
-						new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "Settings"),
-						new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), "ClientID"));
+					nameCode = this.GenerateExternalTemplateField(viewType, name);
 				}
 				else
 				{
@@ -349,6 +356,67 @@ namespace JsonFx.Jbst
 			#endregion this.Bind(new ExternalTemplate(), writer, dataExpr, indexExpr, countExpr);
 
 			method.Statements.Add(methodCall);
+		}
+
+		private CodeExpression GenerateExternalTemplateField(CodeTypeDeclaration viewType, string externalType)
+		{
+			CodeMemberMethod init = null;
+			CodeMemberField field;
+
+			foreach (CodeTypeMember member in viewType.Members)
+			{
+				field = member as CodeMemberField;
+				if (field == null)
+				{
+					CodeMemberMethod temp = member as CodeMemberMethod;
+					if (temp != null &&
+						temp.Name == "Init")
+					{
+						// save Init in case need to generate initialization
+						init = temp;
+					}
+					continue;
+				}
+
+				if (StringComparer.Ordinal.Equals(field.Type.BaseType, externalType))
+				{
+					// reuse a previously created instance
+					return new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), field.Name);
+				}
+			}
+
+			if (init == null)
+			{
+				throw new InvalidOperationException("Constructor not found.");
+			}
+
+			#region private externalType t_XXXX;
+
+			field = new CodeMemberField(externalType, String.Format(FieldFormat, "t", ++this.counter));
+			field.Attributes = MemberAttributes.Private;
+			viewType.Members.Add(field);
+
+			#endregion private externalType t_XXXX;
+
+			#region this.t_XXXX
+
+			var fieldRef = new CodeFieldReferenceExpression(new CodeThisReferenceExpression(), field.Name);
+
+			#endregion this.t_XXXX
+
+			#region this.t_XXXX = new externalType(this);
+			
+			var fieldInit = new CodeAssignStatement(
+				fieldRef,
+				new CodeObjectCreateExpression(
+					externalType,
+					new CodeThisReferenceExpression()));
+
+			init.Statements.Add(fieldInit);
+
+			#endregion this.t_XXXX = new externalType(this);
+
+			return fieldRef;
 		}
 
 		private void ProcessArgs(CodeTypeDeclaration viewType, object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
