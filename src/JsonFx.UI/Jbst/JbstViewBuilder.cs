@@ -55,7 +55,7 @@ namespace JsonFx.Jbst
 		private const string FieldFormat = "{0}_{1:x}";
 		private const string LocalVarFormat = "{0}_{1:x}";
 
-		//private const string JbstVisible = "visible";
+		private static readonly DataName JbstVisible = new DataName("visible", "jbst", null);
 		//private const string JbstOnInit = "oninit";
 		//private const string JbstOnLoad = "onload";
 
@@ -217,13 +217,13 @@ namespace JsonFx.Jbst
 			// effectively FirstOrDefault
 			foreach (var input in this.Analyzer.Analyze(content))
 			{
-				IList<Token<MarkupTokenType>> buffer = new List<Token<MarkupTokenType>>();
+				List<Token<MarkupTokenType>> buffer = new List<Token<MarkupTokenType>>();
 
 				this.ProcessChild(input, output, buffer);
 
 				if (buffer.Count > 0)
 				{
-					// emit any trailing buffered content
+					// flush the buffer
 					string markup = this.HtmlFormatter.Format(buffer);
 					output.Add(this.EmitMarkup(markup));
 					buffer.Clear();
@@ -245,7 +245,7 @@ namespace JsonFx.Jbst
 
 				#endregion private void methodName(TextWriter writer, object data, int index, int count)
 
-				// combine all the statements into the method
+				// add all statements to the method
 				for (int i=0, length=output.Count; i<length; i++)
 				{
 					var code = output[i];
@@ -282,7 +282,7 @@ namespace JsonFx.Jbst
 			return null;
 		}
 
-		private void ProcessChild(object child, List<CodeObject> output, IList<Token<MarkupTokenType>> buffer)
+		private void ProcessChild(object child, List<CodeObject> output, List<Token<MarkupTokenType>> buffer)
 		{
 			if (child is IList)
 			{
@@ -293,6 +293,7 @@ namespace JsonFx.Jbst
 			{
 				if (buffer.Count > 0)
 				{
+					// flush the buffer
 					string markup = this.HtmlFormatter.Format(buffer);
 					output.Add(this.EmitMarkup(markup));
 					buffer.Clear();
@@ -327,44 +328,145 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private void ProcessElement(IList input, List<CodeObject> output, IList<Token<MarkupTokenType>> buffer)
+		private void ProcessElement(IList input, List<CodeObject> output, List<Token<MarkupTokenType>> buffer)
 		{
 			if (input == null || input.Count < 1)
 			{
 				return;
 			}
 
+			int tempStart = buffer.Count;
+
 			DataName tagName = this.SplitDataName((string)input[0], false);
 			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, tagName));
 
 			int i=1, length=input.Count;
 
+			string tagID = null;
+			CodeConditionStatement visible = null;
 			IDictionary<DataName, object> attrs = null;
 			if (length > 1 && input[i] is IDictionary<string, object>)
 			{
 				IDictionary<string, object> allAttr = (IDictionary<string, object>)input[i];
-				attrs = this.ProcessAttributes((IDictionary<string, object>)input[i], buffer);
+				attrs = this.ProcessAttributes(allAttr, buffer);
 				i++;
 
-				if (attrs != null && !allAttr.ContainsKey("id"))
+				if (attrs != null)
 				{
-					allAttr["id"] = "[TODO]";
-					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, allAttr["id"]));
+					if (attrs.ContainsKey(JbstViewBuilder.JbstVisible))
+					{
+						var visibleCode = this.ProcessCommand(attrs[JbstViewBuilder.JbstVisible] as JbstCommand, true);
+						if (visibleCode.Count == 1)
+						{
+							CodeExpression expr = visibleCode[0] as CodeExpression;
+							if (expr != null)
+							{
+								if (tempStart > 0)
+								{
+									// flush any buffer before elem
+									string markup = this.HtmlFormatter.Format(buffer.GetRange(0, tempStart));
+									output.Add(this.EmitMarkup(markup));
+									buffer.RemoveRange(0, tempStart);
+								}
+
+								visible = new CodeConditionStatement();
+								visible.Condition = expr;
+								output.Add(visible);
+							}
+						}
+						else
+						{
+							// TODO.
+						}
+						attrs.Remove(JbstViewBuilder.JbstVisible);
+					}
+
+					if (attrs.Count > 0)
+					{
+						if (allAttr.ContainsKey("id"))
+						{
+							tagID = allAttr["id"] as String;
+						}
+						else
+						{
+							allAttr["id"] = tagID = "[TODO]";
+							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
+							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, tagID));
+						}
+					}
+					else
+					{
+						attrs = null;
+					}
 				}
 			}
+
+			List<CodeObject> children = (visible != null) ? new List<CodeObject>() : output;
 
 			for (; i<length; i++)
 			{
 				var item = input[i];
 
-				this.ProcessChild(item, output, buffer);
+				this.ProcessChild(item, children, buffer);
 			}
 
 			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+			if (attrs != null)
+			{
+				if (buffer.Count > 0)
+				{
+					// flush the buffer
+					string markup = this.HtmlFormatter.Format(buffer);
+					children.Add(this.EmitMarkup(markup));
+					buffer.Clear();
+				}
+
+				// TODO: emit script to set late-bound attributes
+				// add script to children so if not-visible won't emit
+
+				foreach (var pair in attrs)
+				{
+					string expr = this.FormatExpression(pair.Value);
+					children.Add(new CodeCommentStatement(String.Format("{0} => {1}", pair.Key, expr)));
+				}
+			}
+
+			if (visible != null)
+			{
+				if (buffer.Count > 0)
+				{
+					// flush the buffer
+					string markup = this.HtmlFormatter.Format(buffer);
+					children.Add(this.EmitMarkup(markup));
+					buffer.Clear();
+				}
+
+				// add all statements to the conditional
+				foreach (var code in children)
+				{
+					if (code == null)
+					{
+						continue;
+					}
+					
+					if (code is CodeExpression)
+					{
+						visible.TrueStatements.Add((CodeExpression)code);
+					}
+					else if (code is CodeStatement)
+					{
+						visible.TrueStatements.Add((CodeStatement)code);
+					}
+					else
+					{
+						output.Add(code);
+					}
+				}
+			}
 		}
 
-		private IDictionary<DataName, object> ProcessAttributes(IDictionary<string, object> attributes, IList<Token<MarkupTokenType>> buffer)
+		private IDictionary<DataName, object> ProcessAttributes(IDictionary<string, object> attributes, List<Token<MarkupTokenType>> buffer)
 		{
 			IDictionary<DataName, object> attrs = null;
 
