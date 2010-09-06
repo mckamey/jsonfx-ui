@@ -30,12 +30,12 @@
 
 using System;
 using System.CodeDom;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
 using JsonFx.EcmaScript;
 using JsonFx.Html;
-using JsonFx.IO;
 using JsonFx.Markup;
 using JsonFx.Model;
 using JsonFx.Serialization;
@@ -55,6 +55,12 @@ namespace JsonFx.Jbst
 		private const string FieldFormat = "{0}_{1:x}";
 		private const string LocalVarFormat = "{0}_{1:x}";
 
+		//private const string JbstVisible = "visible";
+		//private const string JbstOnInit = "oninit";
+		//private const string JbstOnLoad = "onload";
+
+		private static readonly char[] NameDelim = new[] { ':' };
+
 		private static readonly object Key_VarCount = new object();
 		private static readonly object Key_EmptyBody = new object();
 
@@ -62,10 +68,11 @@ namespace JsonFx.Jbst
 
 		#region Fields
 
+		private readonly ModelAnalyzer Analyzer;
 		private readonly HtmlFormatter HtmlFormatter;
 		private readonly EcmaScriptFormatter JSFormatter;
 		private readonly EcmaScriptBuilder JSBuilder;
-		private readonly Dictionary<string, string> MethodCache = new Dictionary<string, string>();
+		private CodeTypeDeclaration viewType = null;
 		private int counter;
 
 		#endregion Fields
@@ -91,11 +98,13 @@ namespace JsonFx.Jbst
 			{
 				EncodeLessThan = true
 			};
+
+			this.Analyzer = new ModelAnalyzer(new DataReaderSettings(settings.Resolver, settings.Filters));
 		}
 
 		#endregion Init
 
-		#region Build Methods
+		#region Build Method
 
 		public CodeCompileUnit Build(CompilationState state)
 		{
@@ -172,85 +181,226 @@ namespace JsonFx.Jbst
 
 			#endregion Init
 
-			// build control tree
-			this.BuildTemplate(state, viewType, true);
+			List<CodeObject> output = new List<CodeObject>();
+
+			this.viewType = viewType;
+			try
+			{
+				// build control tree
+				this.ProcessTemplate(state, output, true);
+			}
+			finally
+			{
+				this.viewType = null;
+			}
+
+			foreach (CodeTypeMember member in output)
+			{
+				viewType.Members.Add(member);
+			}
 
 			return code;
 		}
 
-		private string BuildTemplate(CompilationState state, CodeTypeDeclaration viewType, bool isRoot)
+		#endregion Build Method
+
+		#region Process Methods
+
+		private string ProcessTemplate(CompilationState state, List<CodeObject> output, bool isRoot)
 		{
-			// each template gets built as a method as it can be called in a loop
-			string methodName = isRoot ? "Root" : String.Format(TemplateMethodFormat, ++this.counter);
-
-			#region private void methodName(TextWriter writer, object data, int index, int count)
-
-			CodeMemberMethod method = new CodeMemberMethod();
-
-			method.Name = methodName;
-			method.Attributes = isRoot ? MemberAttributes.Override|MemberAttributes.Family : MemberAttributes.Private;
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TextWriter), "writer"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
-			method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
-
-			#endregion private void methodName(TextWriter writer, object data, int index, int count)
-
-			string markup;
-			var stream = Stream<Token<MarkupTokenType>>.Create(state.Content);
-
-			stream.BeginChunk();
-			while (!stream.IsCompleted)
+			var content = state.TransformContent();
+			if (content == null)
 			{
-				var token = stream.Peek();
-				if (token.TokenType == MarkupTokenType.Attribute)
-				{
-					DataName attrName = stream.Pop().Name;
-					token = stream.Peek();
-
-					JbstCommand command = token.Value as JbstCommand;
-					if (command != null)
-					{
-						markup = this.HtmlFormatter.Format(stream.EndChunk());
-						this.EmitMarkup(markup, method);
-
-						// TODO: emit code reference
-						this.BuildCommand(viewType, method, command, true);
-
-						stream.Pop();
-						stream.BeginChunk();
-					}
-					else
-					{
-						stream.Pop();
-					}
-					continue;
-				}
-				else if (token.TokenType == MarkupTokenType.Primitive &&
-					token.Value is JbstCommand)
-				{
-					markup = this.HtmlFormatter.Format(stream.EndChunk());
-					this.EmitMarkup(markup, method);
-
-					this.BuildCommand(viewType, method, (JbstCommand)token.Value, false);
-
-					stream.Pop();
-					stream.BeginChunk();
-					continue;
-				}
-
-				stream.Pop();
+				return null;
 			}
 
-			markup = this.HtmlFormatter.Format(stream.EndChunk());
-			this.EmitMarkup(markup, method);
+			// effectively FirstOrDefault
+			foreach (var input in this.Analyzer.Analyze(content))
+			{
+				IList<Token<MarkupTokenType>> buffer = new List<Token<MarkupTokenType>>();
 
-			viewType.Members.Add(method);
+				this.ProcessChild(input, output, buffer);
 
-			return methodName;
+				if (buffer.Count > 0)
+				{
+					// emit any trailing buffered content
+					string markup = this.HtmlFormatter.Format(buffer);
+					output.Add(this.EmitMarkup(markup));
+					buffer.Clear();
+				}
+
+				#region private void methodName(TextWriter writer, object data, int index, int count)
+
+				// each template gets built as a method as it can be called in a loop
+				string methodName = isRoot ? "Root" : String.Format(TemplateMethodFormat, ++this.counter);
+
+				CodeMemberMethod method = new CodeMemberMethod();
+
+				method.Name = methodName;
+				method.Attributes = isRoot ? MemberAttributes.Override|MemberAttributes.Family : MemberAttributes.Private;
+				method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(TextWriter), "writer"));
+				method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(object), "data"));
+				method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "index"));
+				method.Parameters.Add(new CodeParameterDeclarationExpression(typeof(int), "count"));
+
+				#endregion private void methodName(TextWriter writer, object data, int index, int count)
+
+				// combine all the statements into the method
+				for (int i=0, length=output.Count; i<length; i++)
+				{
+					var code = output[i];
+					bool remove = false;
+
+					if (code == null)
+					{
+						remove = true;
+					}
+					else if (code is CodeExpression)
+					{
+						method.Statements.Add((CodeExpression)code);
+						remove = true;
+					}
+					else if (code is CodeStatement)
+					{
+						method.Statements.Add((CodeStatement)code);
+						remove = true;
+					}
+
+					if (remove)
+					{
+						output.RemoveAt(i);
+						i--;
+						length--;
+					}
+				}
+
+				output.Add(method);
+
+				return methodName;
+			}
+
+			return null;
 		}
 
-		private void BuildCommand(CodeTypeDeclaration viewType, CodeMemberMethod method, JbstCommand command, bool isAttribute)
+		private void ProcessChild(object child, List<CodeObject> output, IList<Token<MarkupTokenType>> buffer)
+		{
+			if (child is IList)
+			{
+				this.ProcessElement((IList)child, output, buffer);
+			}
+
+			else if (child is JbstCommand)
+			{
+				if (buffer.Count > 0)
+				{
+					string markup = this.HtmlFormatter.Format(buffer);
+					output.Add(this.EmitMarkup(markup));
+					buffer.Clear();
+				}
+
+				IList<CodeObject> code = this.ProcessCommand((JbstCommand)child, false);
+				if (code != null)
+				{
+					for (int j=0, lines=code.Count; j<lines; j++)
+					{
+						var line = code[j];
+						if (line == null)
+						{
+							code.RemoveAt(j);
+							j--;
+							lines--;
+						}
+
+						if (line is CodeExpression)
+						{
+							code[j] = this.EmitExpression((CodeExpression)line);
+						}
+					}
+					output.AddRange(code);
+				}
+			}
+
+			else
+			{
+				// process as literal
+				buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, child));
+			}
+		}
+
+		private void ProcessElement(IList input, List<CodeObject> output, IList<Token<MarkupTokenType>> buffer)
+		{
+			if (input == null || input.Count < 1)
+			{
+				return;
+			}
+
+			DataName tagName = this.SplitDataName((string)input[0], false);
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, tagName));
+
+			int i=1, length=input.Count;
+
+			IDictionary<DataName, object> attrs = null;
+			if (length > 1 && input[i] is IDictionary<string, object>)
+			{
+				IDictionary<string, object> allAttr = (IDictionary<string, object>)input[i];
+				attrs = this.ProcessAttributes((IDictionary<string, object>)input[i], buffer);
+				i++;
+
+				if (attrs != null && !allAttr.ContainsKey("id"))
+				{
+					allAttr["id"] = "[TODO]";
+					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
+					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, allAttr["id"]));
+				}
+			}
+
+			for (; i<length; i++)
+			{
+				var item = input[i];
+
+				this.ProcessChild(item, output, buffer);
+			}
+
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+		}
+
+		private IDictionary<DataName, object> ProcessAttributes(IDictionary<string, object> attributes, IList<Token<MarkupTokenType>> buffer)
+		{
+			IDictionary<DataName, object> attrs = null;
+
+			foreach (var attr in attributes)
+			{
+				DataName name = this.SplitDataName(attr.Key, true);
+
+				object value = attr.Value;
+				bool isCommand = value is JbstCommand;
+
+				if (!isCommand && name.Prefix == "jbst")
+				{
+					value = new JbstExpressionBlock(value as string);
+					isCommand = true;
+				}
+
+				if (isCommand)
+				{
+					if (attrs == null)
+					{
+						attrs = new Dictionary<DataName, object>(attributes.Count);
+					}
+
+					attrs[name] = value;
+				}
+				else
+				{
+					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, name));
+					buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, value));
+				}
+			}
+
+			return attrs;
+		}
+
+		private IList<CodeObject> ProcessCommand(JbstCommand command, bool isAttribute)
 		{
 			switch (command.CommandType)
 			{
@@ -258,61 +408,54 @@ namespace JsonFx.Jbst
 				case JbstCommandType.UnparsedBlock:
 				case JbstCommandType.StatementBlock:
 				{
-					CodeObject code = this.Translate(viewType, command);
-					if (code is CodeExpression)
-					{
-						this.EmitExpression((CodeExpression)code, method);
-					}
-					else if (code is CodeStatement)
-					{
-						method.Statements.Add((CodeStatement)code);
-					}
-					else if (code is CodeMemberMethod)
-					{
-						method.Statements.AddRange(((CodeMemberMethod)code).Statements);
-					}
-					return;
+					return this.Translate<object>(command);
 				}
 				case JbstCommandType.TemplateReference:
 				{
 					JbstTemplateReference reference = (JbstTemplateReference)command;
-					this.BuildBindReferenceCall(viewType, reference.NameExpr, reference.DataExpr, reference.IndexExpr, reference.CountExpr, method);
-					return;
+					return this.BuildBindReferenceCall(reference.NameExpr, reference.DataExpr, reference.IndexExpr, reference.CountExpr);
 				}
 				case JbstCommandType.InlineTemplate:
 				{
 					JbstInlineTemplate inline = (JbstInlineTemplate)command;
-					string childMethod = this.BuildTemplate(inline.State, viewType, false);
-					this.BuildBindAdapterCall(viewType, childMethod, inline.DataExpr, inline.IndexExpr, inline.CountExpr, method, false);
-					return;
+
+					List<CodeObject> output = new List<CodeObject>();
+					string childMethod = this.ProcessTemplate(inline.State, output, false);
+					if (!String.IsNullOrEmpty(childMethod))
+					{
+						var call = this.BuildBindAdapterCall(childMethod, inline.DataExpr, inline.IndexExpr, inline.CountExpr, false);
+						output.Add(call);
+					}
+					return output;
 				}
 				case JbstCommandType.Placeholder:
 				{
 					// TODO
-					return;
+					return null;
 				}
 				case JbstCommandType.CommentBlock:
 				{
 					JbstCommentBlock comment = (JbstCommentBlock)command;
-					this.EmitMarkup(
-						String.Concat("<!--", comment.Code, "-->"),
-						method);
-					return;
+					return new CodeObject[] { this.EmitMarkup(String.Concat("<!--", comment.Code, "-->")) };
 				}
 				case JbstCommandType.DeclarationBlock:
 				{
 					// these have been compiled away
-					return;
+					return null;
 				}
 				default:
 				{
 					// TODO:
-					return;
+					return null;
 				}
 			}
 		}
 
-		private void BuildBindReferenceCall(CodeTypeDeclaration viewType, object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		#endregion Process Methods
+
+		#region Build Methods
+
+		private IList<CodeObject> BuildBindReferenceCall(object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
 			#region this.Bind(new ExternalTemplate(), writer, dataExpr, indexExpr, countExpr);
 
@@ -322,26 +465,25 @@ namespace JsonFx.Jbst
 				string name = (string)nameExpr;
 				if (EcmaScriptIdentifier.IsValidIdentifier(name, true))
 				{
-					nameCode = this.GenerateExternalTemplateField(viewType, name);
+					nameCode = this.GenerateExternalTemplateField(name);
 				}
 				else
 				{
-					nameCode = this.Translate(viewType, nameExpr) as CodeExpression;
+					nameCode = this.TranslateExpression<object>(nameExpr);
 				}
 			}
 			else
 			{
-				nameCode = this.Translate(viewType, nameExpr) as CodeExpression;
+				nameCode = this.TranslateExpression<object>(nameExpr);
 			}
 
 			CodeExpression dataCode, indexCode, countCode;
-			this.ProcessArgs(viewType, dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
+			this.ProcessArgs(dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
 
 			if (nameCode == null || dataCode == null || indexCode == null || countCode == null)
 			{
 				// force into client mode
-				this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr, method);
-				return;
+				return this.BuildClientReference(nameExpr, dataExpr, indexExpr, countExpr);
 			}
 
 			CodeMethodInvokeExpression methodCall = new CodeMethodInvokeExpression(
@@ -355,15 +497,15 @@ namespace JsonFx.Jbst
 
 			#endregion this.Bind(new ExternalTemplate(), writer, dataExpr, indexExpr, countExpr);
 
-			method.Statements.Add(methodCall);
+			return new CodeObject[] { new CodeExpressionStatement(methodCall) };
 		}
 
-		private CodeExpression GenerateExternalTemplateField(CodeTypeDeclaration viewType, string externalType)
+		private CodeExpression GenerateExternalTemplateField(string externalType)
 		{
 			CodeMemberMethod init = null;
 			CodeMemberField field;
 
-			foreach (CodeTypeMember member in viewType.Members)
+			foreach (CodeTypeMember member in this.viewType.Members)
 			{
 				field = member as CodeMemberField;
 				if (field == null)
@@ -394,7 +536,7 @@ namespace JsonFx.Jbst
 
 			field = new CodeMemberField(externalType, String.Format(FieldFormat, "t", ++this.counter));
 			field.Attributes = MemberAttributes.Private;
-			viewType.Members.Add(field);
+			this.viewType.Members.Add(field);
 
 			#endregion private externalType t_XXXX;
 
@@ -419,11 +561,11 @@ namespace JsonFx.Jbst
 			return fieldRef;
 		}
 
-		private void ProcessArgs(CodeTypeDeclaration viewType, object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
+		private void ProcessArgs(object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
 		{
-			dataCode = this.Translate(viewType, dataExpr) as CodeExpression;
-			indexCode = (dataCode != null) ? this.Translate<int>(viewType, indexExpr) as CodeExpression : null;
-			countCode = (indexCode != null) ? this.Translate<int>(viewType, countExpr) as CodeExpression : null;
+			dataCode = this.TranslateExpression<object>(dataExpr);
+			indexCode = (dataCode != null) ? this.TranslateExpression<int>(indexExpr) as CodeExpression : null;
+			countCode = (indexCode != null) ? this.TranslateExpression<int>(countExpr) as CodeExpression : null;
 
 			if (dataCode is CodeDefaultValueExpression)
 			{
@@ -442,132 +584,59 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		private void BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		private IList<CodeObject> BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
-			string varID = this.GenerateClientIDVar(method);
+			List<CodeObject> output = new List<CodeObject>(20);
 
-			this.EmitMarkup("<noscript id=\"", method);
-			this.EmitVarValue(varID, method);
-			this.EmitMarkup("\">", method);
+			string varID;
+			output.Add(this.GenerateClientIDVar(out varID));
 
-			this.EmitMarkup("</noscript><script type=\"text/javascript\">", method);
-			this.EmitMarkup(this.FormatExpression(nameExpr), method);
-			this.EmitMarkup(".replace(\"", method);
-			this.EmitVarValue(varID, method);
-			this.EmitMarkup("\",", method);
-			this.EmitMarkup(this.FormatExpression(dataExpr), method);
-			this.EmitMarkup(",", method);
-			this.EmitMarkup(this.FormatExpression(indexExpr), method);
-			this.EmitMarkup(",", method);
-			this.EmitMarkup(this.FormatExpression(countExpr), method);
-			this.EmitMarkup(");</script>", method);
+			output.Add(this.EmitMarkup("<noscript id=\""));
+			output.Add(this.EmitVarValue(varID));
+			output.Add(this.EmitMarkup("\">"));
+
+			output.Add(this.EmitMarkup("</noscript><script type=\"text/javascript\">"));
+			output.Add(this.EmitMarkup(this.FormatExpression(nameExpr)));
+			output.Add(this.EmitMarkup(".replace(\""));
+			output.Add(this.EmitVarValue(varID));
+			output.Add(this.EmitMarkup("\","));
+			output.Add(this.EmitMarkup(this.FormatExpression(dataExpr)));
+			output.Add(this.EmitMarkup(","));
+			output.Add(this.EmitMarkup(this.FormatExpression(indexExpr)));
+			output.Add(this.EmitMarkup(","));
+			output.Add(this.EmitMarkup(this.FormatExpression(countExpr)));
+			output.Add(this.EmitMarkup(");</script>"));
+
+			return output;
 		}
 
-		private void BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method)
+		private IList<CodeObject> BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
-			string varID = this.GenerateClientIDVar(method);
+			List<CodeObject> output = new List<CodeObject>(20);
 
-			this.EmitMarkup("<div id=\"", method);
-			this.EmitVarValue(varID, method);
-			this.EmitMarkup("\">", method);
+			string varID;
+			output.Add(this.GenerateClientIDVar(out varID));
+
+			output.Add(this.EmitMarkup("<div id=\""));
+			output.Add(this.EmitVarValue(varID));
+			output.Add(this.EmitMarkup("\">"));
 
 			// TODO: inline content goes here
-			this.EmitMarkup("[ inline content goes here ]", method);
+			output.Add(this.EmitMarkup("[ inline content goes here ]"));
 
-			this.EmitMarkup("</div><script type=\"text/javascript\">", method);
-			this.EmitMarkup(this.FormatExpression(nameExpr), method);
-			this.EmitMarkup(".replace(\"", method);
-			this.EmitVarValue(varID, method);
-			this.EmitMarkup("\",", method);
-			this.EmitMarkup(this.FormatExpression(dataExpr), method);
-			this.EmitMarkup(",", method);
-			this.EmitMarkup(this.FormatExpression(indexExpr), method);
-			this.EmitMarkup(",", method);
-			this.EmitMarkup(this.FormatExpression(countExpr), method);
-			this.EmitMarkup(");</script>", method);
-		}
+			output.Add(this.EmitMarkup("</div><script type=\"text/javascript\">"));
+			output.Add(this.EmitMarkup(this.FormatExpression(nameExpr)));
+			output.Add(this.EmitMarkup(".replace(\""));
+			output.Add(this.EmitVarValue(varID));
+			output.Add(this.EmitMarkup("\","));
+			output.Add(this.EmitMarkup(this.FormatExpression(dataExpr)));
+			output.Add(this.EmitMarkup(","));
+			output.Add(this.EmitMarkup(this.FormatExpression(indexExpr)));
+			output.Add(this.EmitMarkup(","));
+			output.Add(this.EmitMarkup(this.FormatExpression(countExpr)));
+			output.Add(this.EmitMarkup(");</script>"));
 
-		public CodeObject Translate(CodeTypeDeclaration viewType, object expr)
-		{
-			return this.Translate<object>(viewType, expr);
-		}
-
-		private CodeObject Translate<TResult>(CodeTypeDeclaration viewType, object expr)
-		{
-			TranslationResult result = new TranslationResult(
-				typeof(TResult),
-				String.Format(CodeBlockMethodFormat, this.counter),
-				new TranslationResult.ParamDefn(typeof(object), "data"),
-				new TranslationResult.ParamDefn(typeof(int), "index"),
-				new TranslationResult.ParamDefn(typeof(int), "count"))
-			{
-				Script = this.FormatExpression(expr)
-			};
-
-			this.JSBuilder.Translate(result);
-			if (result.IsClientOnly)
-			{
-				// not yet supported on server-side
-				return this.BuildClientExecution(result);
-			}
-
-			int lineCount = result.LineCount;
-			if (lineCount < 1)
-			{
-				// no method body, return default value of expected type
-				var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
-				defValue.UserData[Key_EmptyBody] = result.Script;
-				return defValue;
-			}
-
-			if (lineCount == 1)
-			{
-				var onlyLine = result.Methods[0].Statements[0];
-
-				CodeMethodReturnStatement rs = onlyLine as CodeMethodReturnStatement;
-				if (rs != null)
-				{
-					if (rs.Expression == null)
-					{
-						// no method body, return default value of expected type
-						var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
-						defValue.UserData[Key_EmptyBody] = result.Script;
-						return defValue;
-					}
-
-					// unwrap return expression
-					return rs.Expression;
-				}
-
-				if (onlyLine is CodeExpressionStatement)
-				{
-					// unwrap expression statement
-					return ((CodeExpressionStatement)onlyLine).Expression;
-				}
-
-				if (onlyLine is CodeSnippetStatement)
-				{
-					// unwrap snippet statement
-					return new CodeSnippetExpression(((CodeSnippetStatement)onlyLine).Value);
-				}
-
-				// others will remain as a complete method
-			}
-
-			this.counter++;
-
-			foreach (var method in result.Methods)
-			{
-				viewType.Members.Add(method);
-			}
-
-			// return an invokable expression
-			return new CodeMethodInvokeExpression(
-				new CodeThisReferenceExpression(),
-				result.Methods[0].Name,
-				new CodeArgumentReferenceExpression("data"),
-				new CodeArgumentReferenceExpression("index"),
-				new CodeArgumentReferenceExpression("count"));
+			return output;
 		}
 
 		public string FormatExpression(object argument)
@@ -605,15 +674,15 @@ namespace JsonFx.Jbst
 			return new CodePrimitiveExpression(result.Script);
 		}
 
-		private void BuildBindAdapterCall(CodeTypeDeclaration viewType, string methodName, object dataExpr, object indexExpr, object countExpr, CodeMemberMethod method, bool normalize)
+		private CodeStatement BuildBindAdapterCall(string methodName, object dataExpr, object indexExpr, object countExpr, bool normalize)
 		{
 			CodeExpression dataCode, indexCode, countCode;
-			this.ProcessArgs(viewType, dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
+			this.ProcessArgs(dataExpr, indexExpr, countExpr, out dataCode, out indexCode, out countCode);
 
 			if (dataCode == null || indexCode == null || countCode == null)
 			{
 				// TODO
-				return;
+				return null;
 			}
 
 			#region this.Bind(this.methodName, writer, data, index, count, normalize);
@@ -630,18 +699,117 @@ namespace JsonFx.Jbst
 
 			#endregion this.Bind(this.methodName, writer, data, index, count, normalize);
 
-			method.Statements.Add(methodCall);
+			return new CodeExpressionStatement(methodCall);
 		}
 
 		#endregion Build Methods
 
+		#region Code Translation Methods
+
+		private CodeExpression TranslateExpression<TResult>(object expr)
+		{
+			IList<CodeObject> code = this.Translate<TResult>(expr);
+			return (code.Count == 1) ? code[0] as CodeExpression : null;
+		}
+
+		private IList<CodeObject> Translate<TResult>(object expr)
+		{
+			List<CodeObject> code = new List<CodeObject>();
+
+			TranslationResult result = new TranslationResult(
+				typeof(TResult),
+				String.Format(CodeBlockMethodFormat, this.counter),
+				new TranslationResult.ParamDefn(typeof(object), "data"),
+				new TranslationResult.ParamDefn(typeof(int), "index"),
+				new TranslationResult.ParamDefn(typeof(int), "count"))
+			{
+				Script = this.FormatExpression(expr)
+			};
+
+			this.JSBuilder.Translate(result);
+			if (result.IsClientOnly)
+			{
+				// not yet supported on server-side
+				code.Add(this.BuildClientExecution(result));
+				return code;
+			}
+
+			int lineCount = result.LineCount;
+			if (lineCount < 1)
+			{
+				// no method body, return default value of expected type
+				var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+				defValue.UserData[Key_EmptyBody] = result.Script;
+
+				code.Add(defValue);
+				return code;
+			}
+
+			if (lineCount == 1)
+			{
+				var onlyLine = result.Methods[0].Statements[0];
+
+				CodeMethodReturnStatement rs = onlyLine as CodeMethodReturnStatement;
+				if (rs != null)
+				{
+					if (rs.Expression == null)
+					{
+						// no method body, return default value of expected type
+						var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+						defValue.UserData[Key_EmptyBody] = result.Script;
+						code.Add(defValue);
+						return code;
+					}
+
+					// unwrap return expression
+					code.Add(rs.Expression);
+					return code;
+				}
+
+				if (onlyLine is CodeExpressionStatement)
+				{
+					// unwrap expression statement
+					code.Add(((CodeExpressionStatement)onlyLine).Expression);
+					return code;
+				}
+
+				if (onlyLine is CodeSnippetStatement)
+				{
+					// unwrap snippet statement
+					code.Add(new CodeSnippetExpression(((CodeSnippetStatement)onlyLine).Value));
+					return code;
+				}
+
+				// others will remain as a complete method
+			}
+
+			this.counter++;
+
+			foreach (var method in result.Methods)
+			{
+				code.Add(method);
+			}
+
+			// return an invokable expression
+			code.Add(new CodeMethodInvokeExpression(
+				new CodeThisReferenceExpression(),
+				result.Methods[0].Name,
+				new CodeArgumentReferenceExpression("data"),
+				new CodeArgumentReferenceExpression("index"),
+				new CodeArgumentReferenceExpression("count")));
+
+			return code;
+		}
+
+		#endregion Code Translation Methods
+
 		#region Methods
 
-		private void EmitVarValue(string varName, CodeMemberMethod method)
+		private CodeStatement EmitVarValue(string varName)
 		{
 			if (String.IsNullOrEmpty(varName))
 			{
-				return;
+				return null;
 			}
 
 			#region writer.Write(varName);
@@ -651,30 +819,30 @@ namespace JsonFx.Jbst
 				"Write",
 				new CodeVariableReferenceExpression(varName));
 
-			method.Statements.Add(methodCall);
+			return new CodeExpressionStatement(methodCall);
 
 			#endregion writer.Write(varName);
 		}
 
-		private void EmitMarkup(string markup, CodeMemberMethod method)
+		private CodeStatement EmitMarkup(string markup)
 		{
 			if (String.IsNullOrEmpty(markup))
 			{
-				return;
+				return null;
 			}
 
 			#region writer.Write("escaped markup");
 
-			this.EmitExpression(new CodePrimitiveExpression(markup), method);
+			return this.EmitExpression(new CodePrimitiveExpression(markup));
 
 			#endregion writer.Write("escaped markup");
 		}
 
-		private void EmitExpression(CodeExpression expr, CodeMemberMethod method)
+		private CodeStatement EmitExpression(CodeExpression expr)
 		{
 			if (expr == null)
 			{
-				return;
+				return null;
 			}
 
 			CodeDefaultValueExpression defValue = expr as CodeDefaultValueExpression;
@@ -682,8 +850,7 @@ namespace JsonFx.Jbst
 				defValue.UserData[Key_EmptyBody] != null)
 			{
 				// empty method body, emit comment
-				method.Statements.Add(new CodeCommentStatement(String.Concat("Empty block: ", defValue.UserData[Key_EmptyBody] as string)));
-				return;
+				return new CodeCommentStatement(String.Concat("Empty block: ", defValue.UserData[Key_EmptyBody] as string));
 			}
 
 			#region writer.Write(expr);
@@ -693,39 +860,35 @@ namespace JsonFx.Jbst
 				"Write",
 				expr);
 
-			method.Statements.Add(methodCall);
+			return new CodeExpressionStatement(methodCall);
 
 			#endregion writer.Write(expr);
 		}
 
-		private CodeVariableDeclarationStatement AllocateLocalVar<TVar>(CodeMemberMethod method, string prefix)
+		private CodeVariableDeclarationStatement AllocateLocalVar<TVar>(string prefix)
 		{
 			#region TVar prefix_X;
 
-			int varCount;
-			method.UserData[Key_VarCount] = varCount = method.UserData[Key_VarCount] is Int32 ? ((Int32)method.UserData[Key_VarCount])+1 : 0;
-			string locID = String.Format(LocalVarFormat, prefix, varCount);
+			string locID = String.Format(LocalVarFormat, prefix, ++this.counter);
 
-			var newLoc = new CodeVariableDeclarationStatement(typeof(TVar), locID);
-
-			method.Statements.Add(newLoc);
-
-			return newLoc;
+			return new CodeVariableDeclarationStatement(typeof(TVar), locID);
 
 			#endregion TVar prefix_X;
 		}
 
-		private string GenerateClientIDVar(CodeMemberMethod method)
+		private CodeStatement GenerateClientIDVar(out string varName)
 		{
 			#region string id_XXXX = this.NewID();
 
-			var newLoc = this.AllocateLocalVar<string>(method, "id");
+			var newLoc = this.AllocateLocalVar<string>("id");
 
 			newLoc.InitExpression = new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
 				"NewID");
 
-			return newLoc.Name;
+			varName = newLoc.Name;
+
+			return newLoc;
 
 			#endregion string id_XXXX = this.NewID();
 		}
@@ -733,6 +896,26 @@ namespace JsonFx.Jbst
 		#endregion Methods
 
 		#region Utility Methods
+
+		private DataName SplitDataName(string name, bool isAttrib)
+		{
+			string[] parts = (name??"").Split(NameDelim, 2, StringSplitOptions.RemoveEmptyEntries);
+			switch (parts.Length)
+			{
+				case 1:
+				{
+					return new DataName(parts[0], null, null, isAttrib);
+				}
+				case 2:
+				{
+					return new DataName(parts[1], parts[0], null, isAttrib);
+				}
+				default:
+				{
+					return new DataName(String.Empty);
+				}
+			}
+		}
 
 		private void SplitTypeName(string fullName, out string typeNS, out string typeName)
 		{

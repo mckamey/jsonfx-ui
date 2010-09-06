@@ -60,6 +60,8 @@ namespace JsonFx.Jbst
 		private List<string> imports;
 		private JbstDeclarationBlock declarationBlock;
 		private IDictionary<string, IEnumerable<Token<MarkupTokenType>>> namedTemplates;
+		private IEnumerable<Token<MarkupTokenType>> content;
+		private IEnumerable<Token<ModelTokenType>> transformedContent;
 
 		#endregion Fields
 
@@ -120,8 +122,12 @@ namespace JsonFx.Jbst
 
 		public IEnumerable<Token<MarkupTokenType>> Content
 		{
-			get;
-			set;
+			get { return this.content; }
+			set
+			{
+				this.content = value;
+				this.transformedContent = null;
+			}
 		}
 
 		public EngineType Engine
@@ -152,13 +158,14 @@ namespace JsonFx.Jbst
 			// emit template body and wrap with ctor
 			writer.Write(" = JsonML.BST(");
 
-			if (this.Content == null)
+			if (this.content == null)
 			{
 				base.Format(formatter, writer);
 			}
 			else
 			{
-				this.FormatContent(formatter, writer);
+				var transformed = this.TransformContent();
+				formatter.Format(transformed, writer);
 			}
 
 			writer.WriteLine(");");
@@ -171,11 +178,15 @@ namespace JsonFx.Jbst
 			}
 		}
 
-		public void FormatContent(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
+		public IEnumerable<Token<ModelTokenType>> TransformContent()
 		{
-			var output = this.Transformer.Transform(this.Content);
+			if (this.transformedContent == null &&
+				this.content != null)
+			{
+				this.transformedContent = this.Transformer.Transform(this.content);
+			}
 
-			formatter.Format(output, writer);
+			return this.transformedContent;
 		}
 
 		#endregion ITextFormattable<ModelTokenType> Members
@@ -197,44 +208,48 @@ namespace JsonFx.Jbst
 			this.namedTemplates[name] = content;
 		}
 
-		public void FormatNamedTemplates(ITextFormatter<ModelTokenType> formatter, TextWriter writer)
+		public IEnumerable<Token<ModelTokenType>> NamedTemplates()
 		{
-			formatter.Format(this.TransformNamedTemplates(), writer);
+			if (this.transformedContent == null &&
+				this.content != null)
+			{
+				this.transformedContent = this.TransformNamedTemplates();
+			}
+
+			return this.transformedContent;
 		}
 
 		private IEnumerable<Token<ModelTokenType>> TransformNamedTemplates()
 		{
-			yield return new Token<ModelTokenType>(ModelTokenType.ObjectBegin);
+			List<Token<ModelTokenType>> templates = new List<Token<ModelTokenType>>();
+
+			templates.Add(new Token<ModelTokenType>(ModelTokenType.ObjectBegin));
 
 			if (this.Content != null)
 			{
-				yield return new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix));
+				templates.Add(new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix)));
 
 				var output = this.Transformer.Transform(this.Content);
-				foreach (var token in output)
-				{
-					yield return token;
-				}
+				templates.AddRange(output);
 			}
 
 			if (this.namedTemplates != null)
 			{
 				foreach (var template in this.namedTemplates)
 				{
-					yield return new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix+template.Key));
+					templates.Add(new Token<ModelTokenType>(ModelTokenType.Property, new DataName(JbstPlaceholder.InlinePrefix+template.Key)));
 
 					if (template.Value != null)
 					{
 						var output = this.Transformer.Transform(template.Value);
-						foreach (var token in output)
-						{
-							yield return token;
-						}
+						templates.AddRange(output);
 					}
 				}
 			}
 
-			yield return new Token<ModelTokenType>(ModelTokenType.ObjectEnd);
+			templates.Add(new Token<ModelTokenType>(ModelTokenType.ObjectEnd));
+
+			return templates;
 		}
 
 		#endregion Named Template Methods
