@@ -224,9 +224,7 @@ namespace JsonFx.Jbst
 				if (buffer.Count > 0)
 				{
 					// flush the buffer
-					string markup = this.HtmlFormatter.Format(buffer);
-					output.Add(this.EmitMarkup(markup));
-					buffer.Clear();
+					output.Add(this.EmitMarkup(buffer));
 				}
 
 				#region private void methodName(TextWriter writer, object data, int index, int count)
@@ -294,9 +292,7 @@ namespace JsonFx.Jbst
 				if (buffer.Count > 0)
 				{
 					// flush the buffer
-					string markup = this.HtmlFormatter.Format(buffer);
-					output.Add(this.EmitMarkup(markup));
-					buffer.Clear();
+					output.Add(this.EmitMarkup(buffer));
 				}
 
 				IList<CodeObject> code = this.ProcessCommand((JbstCommand)child, false);
@@ -340,12 +336,15 @@ namespace JsonFx.Jbst
 			DataName tagName = this.SplitDataName((string)input[0], false);
 			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, tagName));
 
-			int i=1, length=input.Count;
-
-			string tagID = null;
+			object tagID = null;
 			CodeConditionStatement visible = null;
 			IDictionary<DataName, object> attrs = null;
-			if (length > 1 && input[i] is IDictionary<string, object>)
+
+			List<CodeObject> children = output;
+			int i = 1,
+				count = input.Count;
+
+			if (count > 1 && input[1] is IDictionary<string, object>)
 			{
 				IDictionary<string, object> allAttr = (IDictionary<string, object>)input[i];
 				attrs = this.ProcessAttributes(allAttr, buffer);
@@ -372,12 +371,14 @@ namespace JsonFx.Jbst
 								visible = new CodeConditionStatement();
 								visible.Condition = expr;
 								output.Add(visible);
+								children = new List<CodeObject>();
 							}
 						}
 						else
 						{
 							// TODO.
 						}
+
 						attrs.Remove(JbstViewBuilder.JbstVisible);
 					}
 
@@ -386,12 +387,26 @@ namespace JsonFx.Jbst
 						if (allAttr.ContainsKey("id"))
 						{
 							tagID = allAttr["id"] as String;
+							if (allAttr.Remove("id") &&
+								allAttr.Count < 1)
+							{
+								allAttr = null;
+							}
 						}
-						else
+
+						if (tagID == null)
 						{
-							allAttr["id"] = tagID = "[TODO]";
+							string varID;
+							output.Add(this.GenerateClientIDVar(out varID));
+							tagID = this.EmitVarValue(varID);
+
+							// emit replacement value
+							string replacement = Guid.NewGuid().ToString("B");
 							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, tagID));
+							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+
+							var pair = new KeyValuePair<string, CodeObject>(replacement, (CodeObject)tagID);
+							children.AddRange(this.EmitMarkup(buffer, pair));
 						}
 					}
 					else
@@ -401,9 +416,7 @@ namespace JsonFx.Jbst
 				}
 			}
 
-			List<CodeObject> children = (visible != null) ? new List<CodeObject>() : output;
-
-			for (; i<length; i++)
+			for (; i<count; i++)
 			{
 				var item = input[i];
 
@@ -417,9 +430,7 @@ namespace JsonFx.Jbst
 				if (buffer.Count > 0)
 				{
 					// flush the buffer
-					string markup = this.HtmlFormatter.Format(buffer);
-					children.Add(this.EmitMarkup(markup));
-					buffer.Clear();
+					children.Add(this.EmitMarkup(buffer));
 				}
 
 				// TODO: emit script to set late-bound attributes
@@ -437,9 +448,7 @@ namespace JsonFx.Jbst
 				if (buffer.Count > 0)
 				{
 					// flush the buffer
-					string markup = this.HtmlFormatter.Format(buffer);
-					children.Add(this.EmitMarkup(markup));
-					buffer.Clear();
+					children.Add(this.EmitMarkup(buffer));
 				}
 
 				// add all statements to the conditional
@@ -924,6 +933,58 @@ namespace JsonFx.Jbst
 			return new CodeExpressionStatement(methodCall);
 
 			#endregion writer.Write(varName);
+		}
+
+		private IList<CodeObject> EmitMarkup(List<Token<MarkupTokenType>> buffer, params KeyValuePair<string, CodeObject>[] replacements)
+		{
+			return this.EmitMarkup(buffer, (IList<KeyValuePair<string, CodeObject>>)replacements);
+		}
+
+		private IList<CodeObject> EmitMarkup(List<Token<MarkupTokenType>> buffer, IList<KeyValuePair<string, CodeObject>> replacements)
+		{
+			// flush the buffer
+			string markup = this.HtmlFormatter.Format(buffer);
+			buffer.Clear();
+
+			if (String.IsNullOrEmpty(markup))
+			{
+				return null;
+			}
+
+			List<CodeObject> code = new List<CodeObject>();
+
+			int start = 0;
+			foreach (var replace in replacements)
+			{
+				// split value and emit replacement code
+				int end = markup.IndexOf(replace.Key, start);
+				if (end < 0)
+				{
+					continue;
+				}
+
+				code.Add(this.EmitMarkup(markup.Substring(start, end)));
+				code.Add(replace.Value);
+
+				start = end + replace.Key.Length;
+			}
+
+			//replacements.Clear();
+
+			if (start < markup.Length)
+			{
+				code.Add(this.EmitMarkup(markup.Substring(start)));
+			}
+
+			return code;
+		}
+
+		private CodeStatement EmitMarkup(List<Token<MarkupTokenType>> buffer)
+		{
+			string markup = this.HtmlFormatter.Format(buffer);
+			buffer.Clear();
+
+			return this.EmitMarkup(markup);
 		}
 
 		private CodeStatement EmitMarkup(string markup)
