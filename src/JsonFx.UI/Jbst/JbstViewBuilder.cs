@@ -62,7 +62,7 @@ namespace JsonFx.Jbst
 		private static readonly char[] NameDelim = new[] { ':' };
 
 		private static readonly object Key_VarCount = new object();
-		private static readonly object Key_EmptyBody = new object();
+		internal static readonly object Key_EmptyBody = new object();
 
 		#endregion Constants
 
@@ -181,7 +181,7 @@ namespace JsonFx.Jbst
 
 			#endregion Init
 
-			List<CodeObject> output = new List<CodeObject>();
+			TranslationState output = new TranslationState(this.HtmlFormatter);
 
 			this.viewType = viewType;
 			try
@@ -194,7 +194,7 @@ namespace JsonFx.Jbst
 				this.viewType = null;
 			}
 
-			foreach (CodeTypeMember member in output)
+			foreach (CodeTypeMember member in output.Code)
 			{
 				viewType.Members.Add(member);
 			}
@@ -206,7 +206,7 @@ namespace JsonFx.Jbst
 
 		#region Process Methods
 
-		private string ProcessTemplate(CompilationState state, List<CodeObject> output, bool isRoot)
+		private string ProcessTemplate(CompilationState state, TranslationState output, bool isRoot)
 		{
 			var content = state.TransformContent();
 			if (content == null)
@@ -217,15 +217,8 @@ namespace JsonFx.Jbst
 			// effectively FirstOrDefault
 			foreach (var input in this.Analyzer.Analyze(content))
 			{
-				List<Token<MarkupTokenType>> buffer = new List<Token<MarkupTokenType>>();
-
-				this.ProcessChild(input, output, buffer);
-
-				if (buffer.Count > 0)
-				{
-					// flush the buffer
-					output.Add(this.EmitMarkup(buffer));
-				}
+				this.ProcessChild(input, output);
+				output.Flush();
 
 				#region private void methodName(TextWriter writer, object data, int index, int count)
 
@@ -244,9 +237,9 @@ namespace JsonFx.Jbst
 				#endregion private void methodName(TextWriter writer, object data, int index, int count)
 
 				// add all statements to the method
-				for (int i=0, length=output.Count; i<length; i++)
+				for (int i=0, length=output.Code.Count; i<length; i++)
 				{
-					var code = output[i];
+					var code = output.Code[i];
 					bool remove = false;
 
 					if (code == null)
@@ -266,13 +259,13 @@ namespace JsonFx.Jbst
 
 					if (remove)
 					{
-						output.RemoveAt(i);
+						output.Code.RemoveAt(i);
 						i--;
 						length--;
 					}
 				}
 
-				output.Add(method);
+				output.Code.Add(method);
 
 				return methodName;
 			}
@@ -280,20 +273,18 @@ namespace JsonFx.Jbst
 			return null;
 		}
 
-		private void ProcessChild(object child, List<CodeObject> output, List<Token<MarkupTokenType>> buffer)
+		private void ProcessChild(object child, TranslationState output)
 		{
 			if (child is IList)
 			{
-				this.ProcessElement((IList)child, output, buffer);
+				// JsonML element
+				this.ProcessElement((IList)child, output);
 			}
 
 			else if (child is JbstCommand)
 			{
-				if (buffer.Count > 0)
-				{
-					// flush the buffer
-					output.Add(this.EmitMarkup(buffer));
-				}
+				// flush the buffer
+				output.Flush();
 
 				IList<CodeObject> code = this.ProcessCommand((JbstCommand)child, false);
 				if (code != null)
@@ -313,41 +304,41 @@ namespace JsonFx.Jbst
 							code[j] = this.EmitExpression((CodeExpression)line);
 						}
 					}
-					output.AddRange(code);
+					output.Code.AddRange(code);
 				}
 			}
 
 			else
 			{
 				// process as literal
-				buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, child));
+				output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, child));
 			}
 		}
 
-		private void ProcessElement(IList input, List<CodeObject> output, List<Token<MarkupTokenType>> buffer)
+		private void ProcessElement(IList input, TranslationState output)
 		{
 			if (input == null || input.Count < 1)
 			{
 				return;
 			}
 
-			int tempStart = buffer.Count;
+			int tempStart = output.Buffer.Count;
 
 			DataName tagName = this.SplitDataName((string)input[0], false);
-			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, tagName));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, tagName));
 
 			object tagID = null;
 			CodeConditionStatement visible = null;
 			IDictionary<DataName, object> attrs = null;
 
-			List<CodeObject> children = output;
+			TranslationState temp = output;
 			int i = 1,
 				count = input.Count;
 
 			if (count > 1 && input[1] is IDictionary<string, object>)
 			{
 				IDictionary<string, object> allAttr = (IDictionary<string, object>)input[i];
-				attrs = this.ProcessAttributes(allAttr, buffer);
+				attrs = this.ProcessAttributes(allAttr, temp.Buffer);
 				i++;
 
 				if (attrs != null)
@@ -360,18 +351,15 @@ namespace JsonFx.Jbst
 							CodeExpression expr = visibleCode[0] as CodeExpression;
 							if (expr != null)
 							{
-								if (tempStart > 0)
-								{
-									// flush any buffer before elem
-									string markup = this.HtmlFormatter.Format(buffer.GetRange(0, tempStart));
-									output.Add(this.EmitMarkup(markup));
-									buffer.RemoveRange(0, tempStart);
-								}
+								// flush any buffer before elem
+								output.Flush(tempStart);
 
 								visible = new CodeConditionStatement();
 								visible.Condition = expr;
-								output.Add(visible);
-								children = new List<CodeObject>();
+								output.Code.Add(visible);
+
+								// capture element output for conditional block
+								temp = new TranslationState(output);
 							}
 						}
 						else
@@ -387,31 +375,27 @@ namespace JsonFx.Jbst
 						if (allAttr.ContainsKey("id"))
 						{
 							tagID = allAttr["id"] as String;
-							if (allAttr.Remove("id") &&
-								allAttr.Count < 1)
-							{
-								allAttr = null;
-							}
+							allAttr.Remove("id");
 						}
 
 						if (tagID == null)
 						{
 							string varID;
-							output.Add(this.GenerateClientIDVar(out varID));
+							temp.Code.Add(this.GenerateClientIDVar(out varID));
 							tagID = this.EmitVarValue(varID);
 
-							// emit replacement value
+							// emit markup with replacement value
 							string replacement = Guid.NewGuid().ToString("B");
-							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-							buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+							temp.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, (CodeObject)tagID));
 
-							var pair = new KeyValuePair<string, CodeObject>(replacement, (CodeObject)tagID);
-							children.AddRange(this.EmitMarkup(buffer, pair));
+							temp.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
+							temp.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
 						}
 					}
-					else
+
+					if (allAttr.Count < 1)
 					{
-						attrs = null;
+						allAttr = null;
 					}
 				}
 			}
@@ -420,18 +404,15 @@ namespace JsonFx.Jbst
 			{
 				var item = input[i];
 
-				this.ProcessChild(item, children, buffer);
+				this.ProcessChild(item, temp);
 			}
 
-			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+			temp.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
 
 			if (attrs != null)
 			{
-				if (buffer.Count > 0)
-				{
-					// flush the buffer
-					children.Add(this.EmitMarkup(buffer));
-				}
+				// flush the buffer
+				temp.Flush();
 
 				// TODO: emit script to set late-bound attributes
 				// add script to children so if not-visible won't emit
@@ -439,37 +420,35 @@ namespace JsonFx.Jbst
 				foreach (var pair in attrs)
 				{
 					string expr = this.FormatExpression(pair.Value);
-					children.Add(new CodeCommentStatement(String.Format("{0} => {1}", pair.Key, expr)));
+					temp.Code.Add(new CodeCommentStatement(String.Format("TODO: {0} => {1}", pair.Key, expr)));
 				}
 			}
 
 			if (visible != null)
 			{
-				if (buffer.Count > 0)
-				{
-					// flush the buffer
-					children.Add(this.EmitMarkup(buffer));
-				}
+				// flush the buffer
+				temp.Flush();
 
 				// add all statements to the conditional
-				foreach (var code in children)
+				foreach (var code in temp.Code)
 				{
 					if (code == null)
 					{
 						continue;
 					}
-					
-					if (code is CodeExpression)
-					{
-						visible.TrueStatements.Add((CodeExpression)code);
-					}
-					else if (code is CodeStatement)
+
+					if (code is CodeStatement)
 					{
 						visible.TrueStatements.Add((CodeStatement)code);
 					}
+					else if (code is CodeExpression)
+					{
+						visible.TrueStatements.Add((CodeExpression)code);
+					}
 					else
 					{
-						output.Add(code);
+						// all others get added to parent
+						output.Code.Add(code);
 					}
 				}
 			}
@@ -530,14 +509,15 @@ namespace JsonFx.Jbst
 				{
 					JbstInlineTemplate inline = (JbstInlineTemplate)command;
 
-					List<CodeObject> output = new List<CodeObject>();
+					TranslationState output = new TranslationState(this.HtmlFormatter);
 					string childMethod = this.ProcessTemplate(inline.State, output, false);
 					if (!String.IsNullOrEmpty(childMethod))
 					{
 						var call = this.BuildBindAdapterCall(childMethod, inline.DataExpr, inline.IndexExpr, inline.CountExpr, false);
-						output.Add(call);
+						output.Code.Add(call);
 					}
-					return output;
+					output.Flush();
+					return output.Code;
 				}
 				case JbstCommandType.Placeholder:
 				{
@@ -547,7 +527,7 @@ namespace JsonFx.Jbst
 				case JbstCommandType.CommentBlock:
 				{
 					JbstCommentBlock comment = (JbstCommentBlock)command;
-					return new CodeObject[] { this.EmitMarkup(String.Concat("<!--", comment.Code, "-->")) };
+					return new CodeObject[] { this.EmitExpression(new CodePrimitiveExpression(String.Concat("<!--", comment.Code, "-->"))) };
 				}
 				case JbstCommandType.DeclarationBlock:
 				{
@@ -672,7 +652,8 @@ namespace JsonFx.Jbst
 			return fieldRef;
 		}
 
-		private void ProcessArgs(object dataExpr, object indexExpr, object countExpr, out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
+		private void ProcessArgs(object dataExpr, object indexExpr, object countExpr,
+			out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
 		{
 			dataCode = this.TranslateExpression<object>(dataExpr);
 			indexCode = (dataCode != null) ? this.TranslateExpression<int>(indexExpr) as CodeExpression : null;
@@ -697,57 +678,81 @@ namespace JsonFx.Jbst
 
 		private IList<CodeObject> BuildClientReference(object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
-			List<CodeObject> output = new List<CodeObject>(20);
+			TranslationState output = new TranslationState(this.HtmlFormatter);
 
 			string varID;
-			output.Add(this.GenerateClientIDVar(out varID));
+			output.Code.Add(this.GenerateClientIDVar(out varID));
 
-			output.Add(this.EmitMarkup("<noscript id=\""));
-			output.Add(this.EmitVarValue(varID));
-			output.Add(this.EmitMarkup("\">"));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("noscript")));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
 
-			output.Add(this.EmitMarkup("</noscript><script type=\"text/javascript\">"));
-			output.Add(this.EmitMarkup(this.FormatExpression(nameExpr)));
-			output.Add(this.EmitMarkup(".replace(\""));
-			output.Add(this.EmitVarValue(varID));
-			output.Add(this.EmitMarkup("\","));
-			output.Add(this.EmitMarkup(this.FormatExpression(dataExpr)));
-			output.Add(this.EmitMarkup(","));
-			output.Add(this.EmitMarkup(this.FormatExpression(indexExpr)));
-			output.Add(this.EmitMarkup(","));
-			output.Add(this.EmitMarkup(this.FormatExpression(countExpr)));
-			output.Add(this.EmitMarkup(");</script>"));
+			string replacement = Guid.NewGuid().ToString("B");
+			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, this.EmitVarValue(varID)));
 
-			return output;
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
+
+			// TODO: replace this block with custom ITextFormattable<MarkupTokenType> object
+
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(nameExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ".replace(\""));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, varID));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "\","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(dataExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(indexExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(countExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ");"));
+
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+			output.Flush();
+
+			return output.Code;
 		}
 
 		private IList<CodeObject> BuildWrapperReference(object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
-			List<CodeObject> output = new List<CodeObject>(20);
+			TranslationState output = new TranslationState(this.HtmlFormatter);
 
 			string varID;
-			output.Add(this.GenerateClientIDVar(out varID));
+			output.Code.Add(this.GenerateClientIDVar(out varID));
 
-			output.Add(this.EmitMarkup("<div id=\""));
-			output.Add(this.EmitVarValue(varID));
-			output.Add(this.EmitMarkup("\">"));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("div")));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
+
+			string replacement = Guid.NewGuid().ToString("B");
+			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, this.EmitVarValue(varID)));
+
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
 
 			// TODO: inline content goes here
-			output.Add(this.EmitMarkup("[ inline content goes here ]"));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "[ inline content goes here ]"));
 
-			output.Add(this.EmitMarkup("</div><script type=\"text/javascript\">"));
-			output.Add(this.EmitMarkup(this.FormatExpression(nameExpr)));
-			output.Add(this.EmitMarkup(".replace(\""));
-			output.Add(this.EmitVarValue(varID));
-			output.Add(this.EmitMarkup("\","));
-			output.Add(this.EmitMarkup(this.FormatExpression(dataExpr)));
-			output.Add(this.EmitMarkup(","));
-			output.Add(this.EmitMarkup(this.FormatExpression(indexExpr)));
-			output.Add(this.EmitMarkup(","));
-			output.Add(this.EmitMarkup(this.FormatExpression(countExpr)));
-			output.Add(this.EmitMarkup(");</script>"));
+			// TODO: replace this block with custom ITextFormattable<MarkupTokenType> object
 
-			return output;
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(nameExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ".replace(\""));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, varID));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "\","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(dataExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(indexExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(countExpr)));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ");"));
+
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+
+			output.Flush();
+
+			return output.Code;
 		}
 
 		public string FormatExpression(object argument)
@@ -933,72 +938,6 @@ namespace JsonFx.Jbst
 			return new CodeExpressionStatement(methodCall);
 
 			#endregion writer.Write(varName);
-		}
-
-		private IList<CodeObject> EmitMarkup(List<Token<MarkupTokenType>> buffer, params KeyValuePair<string, CodeObject>[] replacements)
-		{
-			return this.EmitMarkup(buffer, (IList<KeyValuePair<string, CodeObject>>)replacements);
-		}
-
-		private IList<CodeObject> EmitMarkup(List<Token<MarkupTokenType>> buffer, IList<KeyValuePair<string, CodeObject>> replacements)
-		{
-			// flush the buffer
-			string markup = this.HtmlFormatter.Format(buffer);
-			buffer.Clear();
-
-			if (String.IsNullOrEmpty(markup))
-			{
-				return null;
-			}
-
-			List<CodeObject> code = new List<CodeObject>();
-
-			int start = 0;
-			foreach (var replace in replacements)
-			{
-				// split value and emit replacement code
-				int end = markup.IndexOf(replace.Key, start);
-				if (end < 0)
-				{
-					continue;
-				}
-
-				code.Add(this.EmitMarkup(markup.Substring(start, end)));
-				code.Add(replace.Value);
-
-				start = end + replace.Key.Length;
-			}
-
-			//replacements.Clear();
-
-			if (start < markup.Length)
-			{
-				code.Add(this.EmitMarkup(markup.Substring(start)));
-			}
-
-			return code;
-		}
-
-		private CodeStatement EmitMarkup(List<Token<MarkupTokenType>> buffer)
-		{
-			string markup = this.HtmlFormatter.Format(buffer);
-			buffer.Clear();
-
-			return this.EmitMarkup(markup);
-		}
-
-		private CodeStatement EmitMarkup(string markup)
-		{
-			if (String.IsNullOrEmpty(markup))
-			{
-				return null;
-			}
-
-			#region writer.Write("escaped markup");
-
-			return this.EmitExpression(new CodePrimitiveExpression(markup));
-
-			#endregion writer.Write("escaped markup");
 		}
 
 		private CodeStatement EmitExpression(CodeExpression expr)
