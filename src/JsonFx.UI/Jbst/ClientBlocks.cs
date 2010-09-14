@@ -29,19 +29,36 @@
 #endregion License
 
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 
+using JsonFx.EcmaScript;
 using JsonFx.Markup;
+using JsonFx.Model;
 using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
 {
-	internal class ClientBlock : ITextFormattable<MarkupTokenType>
+	internal abstract class ClientBlock
+	{
+		#region Methods
+
+		public abstract void Format(List<Token<MarkupTokenType>> buffer, List<KeyValuePair<string, CodeObject>> replacements);
+
+		#endregion Methods
+	}
+
+	internal class ReplaceClientBlock : ClientBlock
 	{
 		#region Fields
 
-		private readonly string code;
+		private readonly object ElemID;
+		private readonly object NameExpr;
+		private readonly object DataExpr;
+		private readonly object IndexExpr;
+		private readonly object CountExpr;
 
 		#endregion Fields
 
@@ -50,48 +67,233 @@ namespace JsonFx.Jbst
 		/// <summary>
 		/// Ctor
 		/// </summary>
-		/// <param name="code"></param>
-		public ClientBlock(string code)
+		/// <param name="attrs"></param>
+		public ReplaceClientBlock(object elemID, object nameExpr, object dataExpr, object indexExpr, object countExpr)
 		{
-			this.code = code ?? String.Empty;
+			this.ElemID = elemID;
+			this.NameExpr = nameExpr;
+			this.DataExpr = dataExpr;
+			this.IndexExpr = indexExpr;
+			this.CountExpr = countExpr;
 		}
 
 		#endregion Init
 
-		#region Properties
+		#region Methods
+
+		public override void Format(List<Token<MarkupTokenType>> buffer, List<KeyValuePair<string, CodeObject>> replacements)
+		{
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
+
+			string replace;
+			using (StringWriter writer = new StringWriter(CultureInfo.InvariantCulture))
+			{
+				// emit script to late-bind an element
+				writer.Write("JsonML.BST(");
+
+				if (this.NameExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.NameExpr));
+				}
+				else
+				{
+					replace = this.NameExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(").replace(\"");
+
+				if (this.ElemID is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.ElemID));
+				}
+				else
+				{
+					replace = this.ElemID as string;
+				}
+				writer.Write(replace);
+
+				writer.Write("\",");
+
+				if (this.DataExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.DataExpr));
+				}
+				else
+				{
+					replace = this.DataExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(",");
+				if (this.IndexExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.IndexExpr));
+				}
+				else
+				{
+					replace = this.IndexExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(",");
+				if (this.CountExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.CountExpr));
+				}
+				else
+				{
+					replace = this.CountExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(");");
+
+				// write script to output buffer
+				buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, writer.ToString()));
+			}
+
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+		}
+
+		#endregion Methods
+	}
+
+	internal class PatchClientBlock : ClientBlock
+	{
+		#region Fields
+
+		private readonly object ElemID;
+		private readonly object NameExpr;
+		private readonly object DataExpr;
+		private readonly object IndexExpr;
+		private readonly object CountExpr;
+		private readonly IDictionary<DataName, object> Attrs;
+
+		#endregion Fields
+
+		#region Init
 
 		/// <summary>
-		/// Gets the code block content
+		/// Ctor
 		/// </summary>
-		public virtual string Code
+		/// <param name="attrs"></param>
+		public PatchClientBlock(object elemID, /*object nameExpr,*/ object dataExpr, object indexExpr, object countExpr, IDictionary<DataName, object> attrs)
 		{
-			get { return this.code; }
+			this.ElemID = elemID;
+			//this.NameExpr = nameExpr;
+			this.DataExpr = dataExpr;
+			this.IndexExpr = indexExpr;
+			this.CountExpr = countExpr;
+			this.Attrs = attrs;
 		}
 
-		#endregion Properties
+		#endregion Init
 
-		#region ITextFormattable<MarkupTokenType> Members
+		#region Methods
 
-		public virtual void Format(ITextFormatter<MarkupTokenType> formatter, TextWriter writer)
+		public override void Format(List<Token<MarkupTokenType>> buffer, List<KeyValuePair<string, CodeObject>> replacements)
 		{
-			formatter.Format(new[]
-				{
-					new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")),
-					new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")),
-					new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript")
-				},
-				writer);
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
 
-			// emit directly
-			writer.Write(this.Code);
+			List<Token<ModelTokenType>> tokens = new List<Token<ModelTokenType>>(this.Attrs.Count * 2 + 2);
+			tokens.Add(new Token<ModelTokenType>(ModelTokenType.ObjectBegin));
+			foreach (var pair in this.Attrs)
+			{
+				tokens.Add(new Token<ModelTokenType>(ModelTokenType.Property, pair.Key));
+				tokens.Add(new Token<ModelTokenType>(ModelTokenType.Primitive, pair.Value));
+			}
+			tokens.Add(new Token<ModelTokenType>(ModelTokenType.ObjectEnd));
 
-			formatter.Format(new[]
+			string replace;
+			EcmaScriptFormatter jsFormatter = new EcmaScriptFormatter(new DataWriterSettings());
+			using (StringWriter writer = new StringWriter(CultureInfo.InvariantCulture))
+			{
+				// emit script to set late-bound attributes
+				// emit script to late-bind an element
+				writer.Write("JsonML.BST(");
+
+				//if (this.NameExpr is CodeObject)
+				//{
+				//    replace = Guid.NewGuid().ToString("B");
+				//    replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.NameExpr));
+				//}
+				//else
+				//{
+				//    replace = this.NameExpr as string;
+				//}
+				//writer.Write(replace);
+
+				writer.Write(").patch(\"");
+
+				if (this.ElemID is CodeObject)
 				{
-					new Token<MarkupTokenType>(MarkupTokenType.ElementEnd)
-				},
-				writer);
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.ElemID));
+				}
+				else
+				{
+					replace = this.ElemID as string;
+				}
+				writer.Write(replace);
+
+				writer.Write("\",");
+				jsFormatter.Format(tokens, writer);
+
+				writer.Write(",");
+				if (this.DataExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.DataExpr));
+				}
+				else
+				{
+					replace = this.DataExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(",");
+				if (this.IndexExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.IndexExpr));
+				}
+				else
+				{
+					replace = this.IndexExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(",");
+				if (this.CountExpr is CodeObject)
+				{
+					replace = Guid.NewGuid().ToString("B");
+					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.CountExpr));
+				}
+				else
+				{
+					replace = this.CountExpr as string;
+				}
+				writer.Write(replace);
+
+				writer.Write(");");
+
+				// write script to output buffer
+				buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, writer.ToString()));
+			}
+
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
 		}
 
-		#endregion ITextFormattable<MarkupTokenType> Members
+		#endregion Methods
 	}
 }

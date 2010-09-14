@@ -147,7 +147,7 @@ namespace JsonFx.Jbst
 					continue;
 				}
 
-				code.Add(this.EmitLiteral(markup.Substring(start, end)));
+				code.Add(this.EmitLiteral(markup.Substring(start, end-start)));
 				code.Add(replace.Value);
 
 				start = end + replace.Key.Length;

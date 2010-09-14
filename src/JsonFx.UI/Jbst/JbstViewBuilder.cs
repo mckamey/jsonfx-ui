@@ -406,9 +406,9 @@ namespace JsonFx.Jbst
 						}
 					}
 
-					if (allAttr.Count < 1)
+					if (attrs.Count < 1)
 					{
-						allAttr = null;
+						attrs = null;
 					}
 				}
 			}
@@ -424,17 +424,13 @@ namespace JsonFx.Jbst
 
 			if (attrs != null)
 			{
-				// flush the buffer
-				temp.Flush();
-
-				// TODO: emit script to set late-bound attributes
-				// add script to children so if not-visible won't emit
-
-				foreach (var pair in attrs)
-				{
-					string expr = this.FormatExpression(pair.Value);
-					temp.Code.Add(new CodeCommentStatement(String.Format("TODO: {0} => {1}", pair.Key, expr)));
-				}
+				// add script to temp block so if not-visible won't emit
+				new PatchClientBlock(
+					tagID,
+					this.EmitExprAsJson(new CodeArgumentReferenceExpression("data")),
+					this.EmitExprAsJson(new CodeArgumentReferenceExpression("index")),
+					this.EmitExprAsJson(new CodeArgumentReferenceExpression("count")),
+					attrs).Format(temp.Buffer, temp.Replacements);
 			}
 
 			if (visible != null)
@@ -700,23 +696,14 @@ namespace JsonFx.Jbst
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
 
 			string replacement = Guid.NewGuid().ToString("B");
-			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, this.EmitVarValue(varID)));
+			CodeObject varVal = this.EmitVarValue(varID);
+			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, varVal));
 
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
 
-			// TODO: replace with specific client block
-			ClientBlock block = new ClientBlock(String.Concat(
-				this.FormatExpression(nameExpr),
-				".replace(\"",
-				varID,
-				"\",",
-				this.FormatExpression(dataExpr),
-				",",
-				this.FormatExpression(countExpr),
-				");"));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, block));
+			// emit replacement client block
+			new ReplaceClientBlock(varVal, nameExpr, dataExpr, indexExpr, countExpr).Format(output.Buffer, output.Replacements);
 
 			output.Flush();
 
@@ -734,7 +721,8 @@ namespace JsonFx.Jbst
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
 
 			string replacement = Guid.NewGuid().ToString("B");
-			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, this.EmitVarValue(varID)));
+			CodeObject varVal = this.EmitVarValue(varID);
+			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, varVal));
 
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
@@ -744,18 +732,8 @@ namespace JsonFx.Jbst
 
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd)); // div
 
-			// TODO: replace with specific client block
-			ClientBlock block = new ClientBlock(String.Concat(
-				this.FormatExpression(nameExpr),
-				".replace(\"",
-				varID,
-				"\",",
-				this.FormatExpression(dataExpr),
-				",",
-				this.FormatExpression(countExpr),
-				");"));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, block));
+			// emit replacement client block
+			new ReplaceClientBlock(varVal, nameExpr, dataExpr, indexExpr, countExpr).Format(output.Buffer, output.Replacements);
 
 			output.Flush();
 
@@ -928,6 +906,19 @@ namespace JsonFx.Jbst
 
 		#region Methods
 
+		private CodeExpression EmitExprAsJson(CodeExpression expr)
+		{
+			#region this.ToJson(writer, expr);
+
+			return new CodeMethodInvokeExpression(
+				new CodeThisReferenceExpression(),
+				"ToJson",
+				new CodeArgumentReferenceExpression("writer"),
+				expr);
+
+			#endregion this.ToJson(writer, expr);
+		}
+
 		private CodeStatement EmitVarValue(string varName)
 		{
 			if (String.IsNullOrEmpty(varName))
@@ -987,19 +978,19 @@ namespace JsonFx.Jbst
 
 		private CodeStatement GenerateClientIDVar(out string varName)
 		{
-			#region string id_XXXX = this.NewID();
+			#region string id_XXXX = this.NextID();
 
 			var newLoc = this.AllocateLocalVar<string>("id");
 
 			newLoc.InitExpression = new CodeMethodInvokeExpression(
 				new CodeThisReferenceExpression(),
-				"NewID");
+				"NextID");
 
 			varName = newLoc.Name;
 
 			return newLoc;
 
-			#endregion string id_XXXX = this.NewID();
+			#endregion string id_XXXX = this.NextID();
 		}
 
 		#endregion Methods

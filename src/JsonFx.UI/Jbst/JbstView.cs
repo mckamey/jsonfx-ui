@@ -33,6 +33,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
+using JsonFx.Json;
 using JsonFx.Model;
 using JsonFx.Serialization;
 
@@ -278,12 +279,20 @@ namespace JsonFx.Jbst
 		}
 
 		/// <summary>
-		/// CodeGen
+		/// CodeGen glue
 		/// </summary>
 		/// <returns></returns>
-		protected string NewID()
+		protected string NextID()
 		{
 			return this.ClientID.NextID();
+		}
+
+		/// <summary>
+		/// CodeGen glue
+		/// </summary>
+		protected void ToJson(TextWriter writer, object value)
+		{
+			new JsonWriter(this.Settings).Write(value, writer);
 		}
 
 		#endregion Supporting Methods
