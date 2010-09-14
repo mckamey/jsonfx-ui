@@ -169,6 +169,12 @@ namespace JsonFx.EcmaScript
 		{
 			if (this.ResultType == typeof(object))
 			{
+				if (!addReturn)
+				{
+					// set return type if already had a return statement
+					this.Methods[0].ReturnType = new CodeTypeReference(this.ResultType);
+				}
+
 				// no coercion needed
 				return;
 			}

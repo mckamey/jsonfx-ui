@@ -62,7 +62,7 @@ namespace JsonFx.Jbst
 		private static readonly char[] NameDelim = new[] { ':' };
 
 		private static readonly object Key_VarCount = new object();
-		internal static readonly object Key_EmptyBody = new object();
+		private static readonly object Key_EmptyBody = new object();
 
 		#endregion Constants
 
@@ -346,25 +346,38 @@ namespace JsonFx.Jbst
 					if (attrs.ContainsKey(JbstViewBuilder.JbstVisible))
 					{
 						var visibleCode = this.ProcessCommand(attrs[JbstViewBuilder.JbstVisible] as JbstCommand, true);
-						if (visibleCode.Count == 1)
+						if (visibleCode.Count > 0)
 						{
-							CodeExpression expr = visibleCode[0] as CodeExpression;
+							int lines = visibleCode.Count-1;
+
+							CodeExpression expr = (lines >= 0) ?
+								visibleCode[lines] as CodeExpression :
+								null;
+
 							if (expr != null)
 							{
+								for (int j=0; j<lines; j++)
+								{
+									output.Code.Add(visibleCode[j]);
+								}
+
 								// flush any buffer before elem
 								output.Flush(tempStart);
 
 								visible = new CodeConditionStatement();
-								visible.Condition = expr;
+								if (expr is CodeBinaryOperatorExpression)
+								{
+									visible.Condition = expr;
+								}
+								else
+								{
+									visible.Condition = this.JSBuilder.DeferredCoerceType(typeof(bool), expr);
+								}
 								output.Code.Add(visible);
 
 								// capture element output for conditional block
 								temp = new TranslationState(output);
 							}
-						}
-						else
-						{
-							// TODO.
 						}
 
 						attrs.Remove(JbstViewBuilder.JbstVisible);
@@ -692,24 +705,18 @@ namespace JsonFx.Jbst
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
 
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
+			// TODO: replace with specific client block
+			ClientBlock block = new ClientBlock(String.Concat(
+				this.FormatExpression(nameExpr),
+				".replace(\"",
+				varID,
+				"\",",
+				this.FormatExpression(dataExpr),
+				",",
+				this.FormatExpression(countExpr),
+				");"));
 
-			// TODO: replace this block with custom ITextFormattable<MarkupTokenType> object
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(nameExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ".replace(\""));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, varID));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "\","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(dataExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(indexExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(countExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ");"));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, block));
 
 			output.Flush();
 
@@ -735,20 +742,20 @@ namespace JsonFx.Jbst
 			// TODO: inline content goes here
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "[ inline content goes here ]"));
 
-			// TODO: replace this block with custom ITextFormattable<MarkupTokenType> object
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd)); // div
 
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(nameExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ".replace(\""));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, varID));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "\","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(dataExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(indexExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ","));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, this.FormatExpression(countExpr)));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, ");"));
+			// TODO: replace with specific client block
+			ClientBlock block = new ClientBlock(String.Concat(
+				this.FormatExpression(nameExpr),
+				".replace(\"",
+				varID,
+				"\",",
+				this.FormatExpression(dataExpr),
+				",",
+				this.FormatExpression(countExpr),
+				");"));
 
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, block));
 
 			output.Flush();
 

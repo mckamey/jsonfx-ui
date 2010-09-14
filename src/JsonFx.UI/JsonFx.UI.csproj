@@ -90,6 +90,7 @@
     <Compile Include="EcmaScript\TranslationResult.cs" />
     <Compile Include="EcmaScript\EcmaScriptBuilder.cs" />
     <Compile Include="Jbst\BuildPathAttribute.cs" />
+    <Compile Include="Jbst\ClientBlocks.cs" />
     <Compile Include="Jbst\TranslationState.cs" />
     <Compile Include="Jbst\IClientIDStrategy.cs" />
     <Compile Include="Jbst\JbstCommandType.cs" />

@@ -331,9 +331,11 @@ namespace JsonFx.EcmaScript
 				return null;
 			}
 
+			// TODO: need to adjust for assignments
 			CodeBinaryOperatorType op = EcmaScriptBuilder.MapBinaryOperator(binaryOp.OperatorToken);
+			bool isAssign = this.IsAssign(binaryOp.OperatorToken);
 
-			Type exprType = this.EnsureCompatibleTypes(left, right, expectedType);
+			Type exprType = this.EnsureCompatibleTypes(left, right, expectedType, isAssign);
 
 			return new ExpressionResult
 			{
@@ -342,8 +344,21 @@ namespace JsonFx.EcmaScript
 			};
 		}
 
-		private Type EnsureCompatibleTypes(ExpressionResult left, ExpressionResult right, Type expectedType)
+		private Type EnsureCompatibleTypes(ExpressionResult left, ExpressionResult right, Type expectedType, bool isAssign)
 		{
+			if (isAssign)
+			{
+				if (left.ExpressionType.IsAssignableFrom(right.ExpressionType))
+				{
+					// right compatible with left type
+					return left.ExpressionType;
+				}
+
+				// can only convert the right-hand in an assignment
+				right.Expression = this.DeferredCoerceType(left.ExpressionType, right.Expression);
+				return (right.ExpressionType = left.ExpressionType);
+			}
+
 			if (left.ExpressionType == EmptyType)
 			{
 				if (right.ExpressionType == EmptyType)
@@ -430,15 +445,22 @@ namespace JsonFx.EcmaScript
 			return this.DeferredCoerceType(expectedType, expr);
 		}
 
-		private CodeExpression DeferredCoerceType(Type targetType, CodeExpression expr)
+		internal CodeExpression DeferredCoerceType(Type targetType, CodeExpression expr)
 		{
-			if (expr is CodePrimitiveExpression)
+			try
 			{
-				// coerce at compile time so doesn't need to happen at runtime
-				object value = ((CodePrimitiveExpression)expr).Value;
-				((CodePrimitiveExpression)expr).Value = this.Coercion.CoerceType(targetType, value);
+				if (expr is CodePrimitiveExpression)
+				{
+					// coerce at compile time so doesn't need to happen at runtime
+					object value = ((CodePrimitiveExpression)expr).Value;
+					((CodePrimitiveExpression)expr).Value = this.Coercion.CoerceType(targetType, value);
 
-				return expr;
+					return expr;
+				}
+			}
+			catch
+			{
+				// TODO: determine if this is fatal or should allow runtime execution
 			}
 
 			// wrap expression in a coercion call before return
@@ -522,6 +544,33 @@ namespace JsonFx.EcmaScript
 				default:
 				{
 					return (CodeBinaryOperatorType)(-1);
+				}
+			}
+		}
+
+		private bool IsAssign(JSToken token)
+		{
+			switch (token)
+			{
+				case JSToken.Assign:
+				case JSToken.BitwiseAndAssign:
+				case JSToken.BitwiseOrAssign:
+				case JSToken.BitwiseXorAssign:
+				case JSToken.DivideAssign:
+				case JSToken.LastAssign:
+				case JSToken.LeftShiftAssign:
+				case JSToken.MinusAssign:
+				case JSToken.ModuloAssign:
+				case JSToken.MultiplyAssign:
+				case JSToken.PlusAssign:
+				case JSToken.RightShiftAssign:
+				//case JSToken.UnsignedRightShiftAssign:
+				{
+					return true;
+				}
+				default:
+				{
+					return false;
 				}
 			}
 		}
