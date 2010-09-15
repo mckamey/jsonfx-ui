@@ -32,6 +32,7 @@ using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 using JsonFx.EcmaScript;
 using JsonFx.Html;
@@ -54,6 +55,7 @@ namespace JsonFx.Jbst
 		private static readonly char[] ImportDelim = { ' ', ',' };
 		private static readonly DataName FragmentName = new DataName(String.Empty);
 		private static readonly DataName ScriptName = new DataName("script");
+		private static readonly DataName ScriptSrcName = new DataName("src");
 
 		#endregion Constants
 
@@ -238,7 +240,7 @@ namespace JsonFx.Jbst
 						else if (token.Name == JbstCompiler.ScriptName)
 						{
 							// process declaration block
-							this.ProcessScriptBlock(state, stream);
+							this.ProcessScriptBlock(state, stream, output);
 						}
 						else
 						{
@@ -502,30 +504,54 @@ namespace JsonFx.Jbst
 		/// </summary>
 		/// <param name="state"></param>
 		/// <param name="stream"></param>
-		private void ProcessScriptBlock(CompilationState state, IStream<Token<MarkupTokenType>> stream)
+		private void ProcessScriptBlock(CompilationState state, IStream<Token<MarkupTokenType>> stream, List<Token<MarkupTokenType>> output)
 		{
+			stream.BeginChunk();
 			stream.Pop();
-			while (!stream.IsCompleted)
+
+			bool done = false, 
+				isExternal = false;
+
+			StringBuilder content = new StringBuilder();
+			while (!done && !stream.IsCompleted)
 			{
 				var token = stream.Pop();
 				switch (token.TokenType)
 				{
 					case MarkupTokenType.Primitive:
 					{
-						state.DeclarationBlock.Append(token.ValueAsString());
+						if (!isExternal)
+						{
+							content.Append(token.ValueAsString());
+						}
 						continue;
 					}
 					case MarkupTokenType.ElementEnd:
 					{
-						return;
+						done = true;
+						continue;
 					}
 					case MarkupTokenType.Attribute:
 					{
-						// skip attribute value
+						if (token.Name == JbstCompiler.ScriptSrcName)
+						{
+							isExternal = true;
+						}
+
+						// attribute value
 						stream.Pop();
 						continue;
 					}
 				}
+			}
+
+			if (isExternal)
+			{
+				output.AddRange(stream.EndChunk());
+			}
+			else
+			{
+				state.DeclarationBlock.Append(content.ToString());
 			}
 		}
 

@@ -173,7 +173,7 @@ namespace JsonFx.Jbst
 				// emit script to late-bind an element
 				writer.Write("JsonML.BST(");
 
-				this.Format(this.NameExpr, writer, replacements);
+				this.Format(this.NameExpr ?? new JbstExpressionBlock("['']"), writer, replacements);
 				writer.Write(").replace(\"");
 
 				this.Format(this.ElemID, writer, replacements);
@@ -203,7 +203,7 @@ namespace JsonFx.Jbst
 		#region Fields
 
 		private readonly object ElemID;
-		//private readonly object NameExpr;
+		private readonly object NameExpr;
 		private readonly object DataExpr;
 		private readonly object IndexExpr;
 		private readonly object CountExpr;
@@ -217,10 +217,10 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="attrs"></param>
-		public DisplaceClientBlock(object elemID, /*object nameExpr,*/ object dataExpr, object indexExpr, object countExpr, string script)
+		public DisplaceClientBlock(object elemID, object nameExpr, object dataExpr, object indexExpr, object countExpr, string script)
 		{
 			this.ElemID = elemID;
-			//this.NameExpr = nameExpr;
+			this.NameExpr = nameExpr;
 			this.DataExpr = dataExpr;
 			this.IndexExpr = indexExpr;
 			this.CountExpr = countExpr;
@@ -243,7 +243,7 @@ namespace JsonFx.Jbst
 				// emit script to late-bind an element
 				writer.Write("JsonML.BST(");
 
-				//this.Emit(this.NameExpr, writer, replacements);
+				this.Format(this.NameExpr ?? new JbstExpressionBlock("['']"), writer, replacements);
 
 				writer.Write(").displace(\"");
 
@@ -291,10 +291,10 @@ namespace JsonFx.Jbst
 		/// Ctor
 		/// </summary>
 		/// <param name="attrs"></param>
-		public PatchClientBlock(object elemID, /*object nameExpr,*/ object dataExpr, object indexExpr, object countExpr, IDictionary<DataName, object> attrs)
+		public PatchClientBlock(object elemID, object nameExpr, object dataExpr, object indexExpr, object countExpr, IDictionary<DataName, object> attrs)
 		{
 			this.ElemID = elemID;
-			//this.NameExpr = nameExpr;
+			this.NameExpr = nameExpr;
 			this.DataExpr = dataExpr;
 			this.IndexExpr = indexExpr;
 			this.CountExpr = countExpr;
@@ -326,7 +326,7 @@ namespace JsonFx.Jbst
 				// emit script to late-bind an element
 				writer.Write("JsonML.BST(");
 
-				//this.Format(this.NameExpr, writer, replacements);
+				this.Format(this.NameExpr ?? new JbstExpressionBlock("['']"), writer, replacements);
 				writer.Write(").patch(\"");
 
 				this.Format(this.ElemID, writer, replacements);

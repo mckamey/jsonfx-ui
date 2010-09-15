@@ -306,6 +306,7 @@ namespace JsonFx.Jbst
 
 							new DisplaceClientBlock(
 								tagID,
+								null,
 								this.EmitExprAsJson(new CodeArgumentReferenceExpression("data")),
 								this.EmitExprAsJson(new CodeArgumentReferenceExpression("index")),
 								this.EmitExprAsJson(new CodeArgumentReferenceExpression("count")),
@@ -440,6 +441,7 @@ namespace JsonFx.Jbst
 				// add script to temp block so if not-visible won't emit
 				new PatchClientBlock(
 					tagID,
+					null,
 					this.EmitExprAsJson(new CodeArgumentReferenceExpression("data")),
 					this.EmitExprAsJson(new CodeArgumentReferenceExpression("index")),
 					this.EmitExprAsJson(new CodeArgumentReferenceExpression("count")),
