@@ -289,22 +289,44 @@ namespace JsonFx.Jbst
 				IList<CodeObject> code = this.ProcessCommand((JbstCommand)child, false);
 				if (code != null)
 				{
-					for (int j=0, lines=code.Count; j<lines; j++)
+					int lines = code.Count;
+					for (int j=0; j<lines; j++)
 					{
-						var line = code[j];
-						if (line == null)
+						ClientDeferredCode deferred = code[j] as ClientDeferredCode;
+						if (deferred != null)
+						{
+							// technically, this should be emitted back into "code" not output
+							// but this should only happen when there is a single code line
+							string script = deferred.Script;
+
+							// assert (lines == 1)
+							output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("noscript")));
+							var tagID = this.EmitClientID(output);
+							output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));// noscript
+
+							new DisplaceClientBlock(
+								tagID,
+								this.EmitExprAsJson(new CodeArgumentReferenceExpression("data")),
+								this.EmitExprAsJson(new CodeArgumentReferenceExpression("index")),
+								this.EmitExprAsJson(new CodeArgumentReferenceExpression("count")),
+								script).Format(output.Buffer, output.Replacements);
+
+							// mark for removal
+							code[j] = null;
+						}
+
+						if (code[j] == null)
 						{
 							code.RemoveAt(j);
 							j--;
 							lines--;
 						}
-
-						if (line is CodeExpression)
-						{
-							code[j] = this.EmitExpression((CodeExpression)line);
-						}
 					}
-					output.Code.AddRange(code);
+
+					if (lines > 0)
+					{
+						output.Code.AddRange(code);
+					}
 				}
 			}
 
@@ -393,16 +415,7 @@ namespace JsonFx.Jbst
 
 						if (tagID == null)
 						{
-							string varID;
-							temp.Code.Add(this.GenerateClientIDVar(out varID));
-							tagID = this.EmitVarValue(varID);
-
-							// emit markup with replacement value
-							string replacement = Guid.NewGuid().ToString("B");
-							temp.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, (CodeObject)tagID));
-
-							temp.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-							temp.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+							tagID = this.EmitClientID(temp);
 						}
 					}
 
@@ -505,6 +518,21 @@ namespace JsonFx.Jbst
 			{
 				case JbstCommandType.ExpressionBlock:
 				case JbstCommandType.UnparsedBlock:
+				{
+					IList<CodeObject> code = this.Translate<object>(command);
+					if (code != null)
+					{
+						for (int i=0, length=code.Count; i<length; i++)
+						{
+							CodeExpression expr = code[i] as CodeExpression;
+							if (expr != null)
+							{
+								code[i] = this.EmitExpression(expr);
+							}
+						}
+					}
+					return code;
+				}
 				case JbstCommandType.StatementBlock:
 				{
 					return this.Translate<object>(command);
@@ -664,6 +692,7 @@ namespace JsonFx.Jbst
 		private void ProcessArgs(object dataExpr, object indexExpr, object countExpr,
 			out CodeExpression dataCode, out CodeExpression indexCode, out CodeExpression countCode)
 		{
+			// shortcut translation as one null prevents rest
 			dataCode = this.TranslateExpression<object>(dataExpr);
 			indexCode = (dataCode != null) ? this.TranslateExpression<int>(indexExpr) as CodeExpression : null;
 			countCode = (indexCode != null) ? this.TranslateExpression<int>(countExpr) as CodeExpression : null;
@@ -689,21 +718,17 @@ namespace JsonFx.Jbst
 		{
 			TranslationState output = new TranslationState(this.HtmlFormatter);
 
-			string varID;
-			output.Code.Add(this.GenerateClientIDVar(out varID));
-
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("noscript")));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-
-			string replacement = Guid.NewGuid().ToString("B");
-			CodeObject varVal = this.EmitVarValue(varID);
-			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, varVal));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+			CodeObject tagID = this.EmitClientID(output);
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));// noscript
 
 			// emit replacement client block
-			new ReplaceClientBlock(varVal, nameExpr, dataExpr, indexExpr, countExpr).Format(output.Buffer, output.Replacements);
+			new ReplaceClientBlock(
+				tagID,
+				nameExpr,
+				dataExpr,
+				indexExpr,
+				countExpr).Format(output.Buffer, output.Replacements);
 
 			output.Flush();
 
@@ -714,26 +739,21 @@ namespace JsonFx.Jbst
 		{
 			TranslationState output = new TranslationState(this.HtmlFormatter);
 
-			string varID;
-			output.Code.Add(this.GenerateClientIDVar(out varID));
-
 			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("div")));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
-
-			string replacement = Guid.NewGuid().ToString("B");
-			CodeObject varVal = this.EmitVarValue(varID);
-			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, varVal));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
-
-			// TODO: inline content goes here
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "[ inline content goes here ]"));
-
-			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd)); // div
+			var tagID = this.EmitClientID(output);
+			{
+				// TODO: inline content goes here
+				output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "[ inline content goes here ]"));
+			}
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));// div
 
 			// emit replacement client block
-			new ReplaceClientBlock(varVal, nameExpr, dataExpr, indexExpr, countExpr).Format(output.Buffer, output.Replacements);
+			new ReplaceClientBlock(
+				tagID,
+				nameExpr,
+				dataExpr,
+				indexExpr,
+				countExpr).Format(output.Buffer, output.Replacements);
 
 			output.Flush();
 
@@ -768,11 +788,6 @@ namespace JsonFx.Jbst
 
 			// convert to token sequence and allow formatter to emit as JS primitive
 			return this.JSFormatter.Format(new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, argument) });
-		}
-
-		private CodeObject BuildClientExecution(TranslationResult result)
-		{
-			return new CodePrimitiveExpression(result.Script);
 		}
 
 		private CodeStatement BuildBindAdapterCall(string methodName, object dataExpr, object indexExpr, object countExpr, bool normalize)
@@ -810,7 +825,9 @@ namespace JsonFx.Jbst
 		private CodeExpression TranslateExpression<TResult>(object expr)
 		{
 			IList<CodeObject> code = this.Translate<TResult>(expr);
-			return (code.Count == 1) ? code[0] as CodeExpression : null;
+			return (code.Count == 1) ?
+				code[0] as CodeExpression :
+				null;
 		}
 
 		private IList<CodeObject> Translate<TResult>(object expr)
@@ -830,19 +847,21 @@ namespace JsonFx.Jbst
 			this.JSBuilder.Translate(result);
 			if (result.IsClientOnly)
 			{
-				// not yet supported on server-side
-				code.Add(this.BuildClientExecution(result));
+				// not yet supported on server-side, defer execution to client
+				code.Add(new ClientDeferredCode(result.Script));
 				return code;
 			}
 
 			int lineCount = result.LineCount;
 			if (lineCount < 1)
 			{
-				// no method body, return default value of expected type
-				var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
-				defValue.UserData[Key_EmptyBody] = result.Script;
+				// TODO: no method body, return default value of expected type?
 
-				code.Add(defValue);
+				//var defValue = new CodeDefaultValueExpression(new CodeTypeReference(typeof(TResult)));
+				//defValue.UserData[Key_EmptyBody] = result.Script;
+				//code.Add(defValue);
+
+				code.Add(new CodeCommentStatement("Empty block: "+result.Script));
 				return code;
 			}
 
@@ -919,23 +938,24 @@ namespace JsonFx.Jbst
 			#endregion this.ToJson(writer, expr);
 		}
 
-		private CodeStatement EmitVarValue(string varName)
+		private CodeExpression EmitClientID(TranslationState output)
 		{
-			if (String.IsNullOrEmpty(varName))
-			{
-				return null;
-			}
+			string varID;
+			output.Code.Add(this.GenerateClientIDVar(out varID));
 
-			#region writer.Write(varName);
-
-			CodeExpression methodCall = new CodeMethodInvokeExpression(
+			string replacement = Guid.NewGuid().ToString("B");
+			CodeExpression tagID = new CodeMethodInvokeExpression(
 				new CodeArgumentReferenceExpression("writer"),
 				"Write",
-				new CodeVariableReferenceExpression(varName));
+				new CodeVariableReferenceExpression(varID));
 
-			return new CodeExpressionStatement(methodCall);
+			// emit markup with replacement value
+			output.Replacements.Add(new KeyValuePair<string, CodeObject>(replacement, tagID));
 
-			#endregion writer.Write(varName);
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("id")));
+			output.Buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, replacement));
+
+			return tagID;
 		}
 
 		private CodeStatement EmitExpression(CodeExpression expr)

@@ -33,7 +33,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 
-using JsonFx.Json;
+using JsonFx.EcmaScript;
 using JsonFx.Model;
 using JsonFx.Serialization;
 
@@ -292,7 +292,9 @@ namespace JsonFx.Jbst
 		/// </summary>
 		protected void ToJson(TextWriter writer, object value)
 		{
-			new JsonWriter(this.Settings).Write(value, writer);
+			new EcmaScriptFormatter(this.Settings).Format(
+				new ModelWalker(this.Settings).GetTokens(value),
+				writer);
 		}
 
 		#endregion Supporting Methods

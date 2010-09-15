@@ -41,11 +41,92 @@ using JsonFx.Serialization;
 
 namespace JsonFx.Jbst
 {
+	internal class ClientDeferredCode : CodeObject
+	{
+		#region Fields
+
+		public readonly string Script;
+
+		#endregion Fields
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="script"></param>
+		public ClientDeferredCode(string script)
+		{
+			this.Script = script;
+		}
+
+		#endregion Init
+	}
+
 	internal abstract class ClientBlock
 	{
+		#region Fields
+
+		private DataWriterSettings settings;
+		private ModelWalker walker;
+		private EcmaScriptFormatter formatter;
+
+		#endregion Fields
+
 		#region Methods
 
 		public abstract void Format(List<Token<MarkupTokenType>> buffer, List<KeyValuePair<string, CodeObject>> replacements);
+
+		protected void Format(object value, TextWriter writer, List<KeyValuePair<string, CodeObject>> replacements)
+		{
+			if (value is CodeObject)
+			{
+				string replace = Guid.NewGuid().ToString("B");
+				replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)value));
+				writer.Write(replace);
+				return;
+			}
+			
+			if (value is JbstCommand)
+			{
+				this.Format(value, writer);
+				return;
+			}
+
+			writer.Write(value);
+		}
+
+		private void Format(object value, TextWriter writer)
+		{
+			if (this.settings == null)
+			{
+				this.settings = new DataWriterSettings();
+			}
+			if (this.walker == null)
+			{
+				this.walker = new ModelWalker(this.settings);
+			}
+
+			var tokens = (value is ITextFormattable<ModelTokenType>) ?
+				new[] { new Token<ModelTokenType>(ModelTokenType.Primitive, value) }:
+				this.walker.GetTokens(value);
+
+			this.Format(tokens, writer);
+		}
+
+		protected void Format(IEnumerable<Token<ModelTokenType>> tokens, TextWriter writer)
+		{
+			if (this.settings == null)
+			{
+				this.settings = new DataWriterSettings();
+			}
+			if (this.formatter == null)
+			{
+				this.formatter = new EcmaScriptFormatter(this.settings);
+			}
+
+			this.formatter.Format(tokens, writer);
+		}
 
 		#endregion Methods
 	}
@@ -87,73 +168,98 @@ namespace JsonFx.Jbst
 			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
 			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
 
-			string replace;
 			using (StringWriter writer = new StringWriter(CultureInfo.InvariantCulture))
 			{
 				// emit script to late-bind an element
 				writer.Write("JsonML.BST(");
 
-				if (this.NameExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.NameExpr));
-				}
-				else
-				{
-					replace = this.NameExpr as string;
-				}
-				writer.Write(replace);
-
+				this.Format(this.NameExpr, writer, replacements);
 				writer.Write(").replace(\"");
 
-				if (this.ElemID is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.ElemID));
-				}
-				else
-				{
-					replace = this.ElemID as string;
-				}
-				writer.Write(replace);
-
+				this.Format(this.ElemID, writer, replacements);
 				writer.Write("\",");
 
-				if (this.DataExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.DataExpr));
-				}
-				else
-				{
-					replace = this.DataExpr as string;
-				}
-				writer.Write(replace);
-
+				this.Format(this.DataExpr, writer, replacements);
 				writer.Write(",");
-				if (this.IndexExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.IndexExpr));
-				}
-				else
-				{
-					replace = this.IndexExpr as string;
-				}
-				writer.Write(replace);
 
+				this.Format(this.IndexExpr, writer, replacements);
 				writer.Write(",");
-				if (this.CountExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.CountExpr));
-				}
-				else
-				{
-					replace = this.CountExpr as string;
-				}
-				writer.Write(replace);
 
+				this.Format(this.CountExpr, writer, replacements);
+				writer.Write(");");
+
+				// write script to output buffer
+				buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, writer.ToString()));
+			}
+
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementEnd));
+		}
+
+		#endregion Methods
+	}
+
+	internal class DisplaceClientBlock : ClientBlock
+	{
+		#region Fields
+
+		private readonly object ElemID;
+		//private readonly object NameExpr;
+		private readonly object DataExpr;
+		private readonly object IndexExpr;
+		private readonly object CountExpr;
+		private readonly string Script;
+
+		#endregion Fields
+
+		#region Init
+
+		/// <summary>
+		/// Ctor
+		/// </summary>
+		/// <param name="attrs"></param>
+		public DisplaceClientBlock(object elemID, /*object nameExpr,*/ object dataExpr, object indexExpr, object countExpr, string script)
+		{
+			this.ElemID = elemID;
+			//this.NameExpr = nameExpr;
+			this.DataExpr = dataExpr;
+			this.IndexExpr = indexExpr;
+			this.CountExpr = countExpr;
+			this.Script = script;
+		}
+
+		#endregion Init
+
+		#region Methods
+
+		public override void Format(List<Token<MarkupTokenType>> buffer, List<KeyValuePair<string, CodeObject>> replacements)
+		{
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.ElementBegin, new DataName("script")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Attribute, new DataName("type")));
+			buffer.Add(new Token<MarkupTokenType>(MarkupTokenType.Primitive, "text/javascript"));
+
+			using (StringWriter writer = new StringWriter(CultureInfo.InvariantCulture))
+			{
+				// emit script to set late-bound attributes
+				// emit script to late-bind an element
+				writer.Write("JsonML.BST(");
+
+				//this.Emit(this.NameExpr, writer, replacements);
+
+				writer.Write(").displace(\"");
+
+				this.Format(this.ElemID, writer, replacements);
+				writer.Write("\",");
+
+				writer.Write(this.Script);
+				writer.Write(",");
+
+				this.Format(this.DataExpr, writer, replacements);
+				writer.Write(",");
+
+				this.Format(this.IndexExpr, writer, replacements);
+				writer.Write(",");
+
+				this.Format(this.CountExpr, writer, replacements);
 				writer.Write(");");
 
 				// write script to output buffer
@@ -214,77 +320,28 @@ namespace JsonFx.Jbst
 			}
 			tokens.Add(new Token<ModelTokenType>(ModelTokenType.ObjectEnd));
 
-			string replace;
-			EcmaScriptFormatter jsFormatter = new EcmaScriptFormatter(new DataWriterSettings());
 			using (StringWriter writer = new StringWriter(CultureInfo.InvariantCulture))
 			{
 				// emit script to set late-bound attributes
 				// emit script to late-bind an element
 				writer.Write("JsonML.BST(");
 
-				//if (this.NameExpr is CodeObject)
-				//{
-				//    replace = Guid.NewGuid().ToString("B");
-				//    replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.NameExpr));
-				//}
-				//else
-				//{
-				//    replace = this.NameExpr as string;
-				//}
-				//writer.Write(replace);
-
+				//this.Format(this.NameExpr, writer, replacements);
 				writer.Write(").patch(\"");
 
-				if (this.ElemID is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.ElemID));
-				}
-				else
-				{
-					replace = this.ElemID as string;
-				}
-				writer.Write(replace);
-
+				this.Format(this.ElemID, writer, replacements);
 				writer.Write("\",");
-				jsFormatter.Format(tokens, writer);
 
+				this.Format(tokens, writer);
 				writer.Write(",");
-				if (this.DataExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.DataExpr));
-				}
-				else
-				{
-					replace = this.DataExpr as string;
-				}
-				writer.Write(replace);
 
+				this.Format(this.DataExpr, writer, replacements);
 				writer.Write(",");
-				if (this.IndexExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.IndexExpr));
-				}
-				else
-				{
-					replace = this.IndexExpr as string;
-				}
-				writer.Write(replace);
 
+				this.Format(this.IndexExpr, writer, replacements);
 				writer.Write(",");
-				if (this.CountExpr is CodeObject)
-				{
-					replace = Guid.NewGuid().ToString("B");
-					replacements.Add(new KeyValuePair<string, CodeObject>(replace, (CodeObject)this.CountExpr));
-				}
-				else
-				{
-					replace = this.CountExpr as string;
-				}
-				writer.Write(replace);
 
+				this.Format(this.CountExpr, writer, replacements);
 				writer.Write(");");
 
 				// write script to output buffer
