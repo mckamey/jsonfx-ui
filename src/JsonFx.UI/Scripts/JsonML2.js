@@ -161,7 +161,7 @@ if ("undefined" === typeof JsonML) {
 			if (attr.hasOwnProperty(name)) {
 				// attributeValue
 				var value = attr[name];
-				if (name && value) {
+				if (name && value !== null && "undefined" !== typeof value) {
 					name = ATTRMAP[name.toLowerCase()] || name;
 					if (name === "style") {
 						if ("undefined" !== typeof elem.style.cssText) {
@@ -362,7 +362,7 @@ if ("undefined" === typeof JsonML) {
 				return null;
 			}
 
-			var elem = JsonML.patch(document.createElement(tagName), jml, filter);
+			var elem = patch(document.createElement(tagName), jml, filter);
 
 			// trim extraneous whitespace
 			trimWhitespace(elem);
