@@ -84,7 +84,7 @@ namespace JsonFx.Jbst
 			{
 				throw new ArgumentNullException("settings");
 			}
-			if (settings == null)
+			if (clientID == null)
 			{
 				throw new ArgumentNullException("clientID");
 			}
