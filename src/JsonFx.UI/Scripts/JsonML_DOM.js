@@ -141,9 +141,9 @@ if ("undefined" === typeof JsonML) {
 			elem = null;
 			return str;
 		case 10: // doctype
-			jml = ["!"];
+			jml = ["!doctype"];
 
-			var type = ["DOCTYPE", (elem.name || "html").toLowerCase()];
+			var type = [(elem.name || "html").toLowerCase()];
 
 			if (elem.publicId) {
 				type.push("PUBLIC", '"' + elem.publicId + '"');
@@ -164,14 +164,13 @@ if ("undefined" === typeof JsonML) {
 			elem = null;
 			return jml;
 		case 8: // comment node
-			if ((elem.nodeValue||"").indexOf("DOCTYPE") !== 0) {
-				// free references
-				elem = null;
-				return null;
-			}
+			jml = ["!", (elem.nodeValue||"")];
 
-			jml = ["!",
-					elem.nodeValue];
+			if (jml[1].toLowerCase().indexOf("doctype") === 0) {
+				// IE represents DocType as comment
+				jml[0] = "!doctype"
+				jml[1] = jml[1].substr(8);
+			}
 
 			// filter result
 			if ("function" === typeof filter) {
